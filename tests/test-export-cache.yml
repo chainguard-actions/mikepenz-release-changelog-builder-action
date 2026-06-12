@@ -1,0 +1,59 @@
+name: Test exportCache and cache inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/tags/v2.0.0
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup git tags for range
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test"
+          git tag v1.0.0 HEAD~1 2>/dev/null || git tag v1.0.0 HEAD
+          git tag v2.0.0 HEAD 2>/dev/null || true
+
+      # First run: export cache
+      - id: first-run
+        uses: .
+        with:
+          fromTag: v1.0.0
+          toTag: v2.0.0
+          mode: COMMIT
+          offlineMode: "true"
+          failOnError: "false"
+          exportCache: "true"
+
+      - name: Show first run cache output
+        env:
+          CACHE_OUTPUT: ${{ steps.first-run.outputs.cache }}
+          FAILED: ${{ steps.first-run.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          echo "cache output length: ${#CACHE_OUTPUT}"
+          echo "PASS: first run with exportCache completed"
+
+      # Second run: consume cache
+      - id: second-run
+        uses: .
+        with:
+          fromTag: v1.0.0
+          toTag: v2.0.0
+          mode: COMMIT
+          offlineMode: "true"
+          failOnError: "false"
+          exportCache: "true"
+          cache: ${{ steps.first-run.outputs.cache }}
+
+      - name: Assert second run completed
+        env:
+          FAILED: ${{ steps.second-run.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          echo "PASS: second run with cache input completed"

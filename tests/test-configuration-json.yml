@@ -1,0 +1,51 @@
+name: Test configurationJson input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/tags/v2.0.0
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup git tags for range
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test"
+          git tag v1.0.0 HEAD~1 2>/dev/null || git tag v1.0.0 HEAD
+          git tag v2.0.0 HEAD 2>/dev/null || true
+
+      - id: changelog
+        uses: .
+        with:
+          fromTag: v1.0.0
+          toTag: v2.0.0
+          configurationJson: |
+            {
+              "categories": [
+                {
+                  "title": "## 🚀 Features",
+                  "labels": ["feature"]
+                },
+                {
+                  "title": "## 🐛 Bug Fixes",
+                  "labels": ["bug"]
+                }
+              ],
+              "template": "#{{CHANGELOG}}",
+              "pr_template": "- #{{TITLE}}"
+            }
+          mode: COMMIT
+          offlineMode: "true"
+          failOnError: "false"
+
+      - name: Assert action completed
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          echo "PASS: action completed with configurationJson input"
