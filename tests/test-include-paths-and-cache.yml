@@ -1,0 +1,69 @@
+name: Test includeOnlyPaths, baseUrl, and cache inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test tags
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test"
+          git tag paths-from-v0.0.1 HEAD~1 2>/dev/null || git tag paths-from-v0.0.1 HEAD
+          git tag paths-to-v0.0.2 HEAD
+
+      # First run: export cache
+      - id: action-export
+        uses: .
+        with:
+          fromTag: paths-from-v0.0.1
+          toTag: paths-to-v0.0.2
+          includeOnlyPaths: |
+            src/
+            lib/
+          baseUrl: https://api.github.com
+          offlineMode: "true"
+          commitMode: "true"
+          exportCache: "true"
+          failOnError: "false"
+          token: ${{ github.token }}
+
+      - name: Assert export run completed
+        env:
+          FAILED: ${{ steps.action-export.outputs.failed }}
+          CACHE: ${{ steps.action-export.outputs.cache }}
+        run: |
+          echo "failed: $FAILED"
+          echo "cache length: ${#CACHE}"
+          if [ -z "$FAILED" ]; then
+            echo "FAIL: expected 'failed' output to be set"
+            exit 1
+          fi
+          echo "PASS: export run completed with failed=$FAILED"
+
+      # Second run: consume cache
+      - id: action-cache
+        uses: .
+        with:
+          fromTag: paths-from-v0.0.1
+          toTag: paths-to-v0.0.2
+          cache: ${{ steps.action-export.outputs.cache }}
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          token: ${{ github.token }}
+
+      - name: Assert cache run completed
+        env:
+          FAILED: ${{ steps.action-cache.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ -z "$FAILED" ]; then
+            echo "FAIL: expected 'failed' output to be set"
+            exit 1
+          fi
+          echo "PASS: cache run completed with failed=$FAILED"

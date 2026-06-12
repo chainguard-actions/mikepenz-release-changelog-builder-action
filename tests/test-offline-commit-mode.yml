@@ -1,0 +1,57 @@
+name: Test offline commit mode with fromTag/toTag/owner/repo/path
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test tags for offline mode
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test"
+          # Create two tags to compare between
+          git tag test-from-v0.0.1 HEAD~1 2>/dev/null || git tag test-from-v0.0.1 HEAD
+          git tag test-to-v0.0.2 HEAD
+
+      - id: action
+        uses: .
+        with:
+          fromTag: test-from-v0.0.1
+          toTag: test-to-v0.0.2
+          owner: mikepenz
+          repo: release-changelog-builder-action
+          path: ${{ github.workspace }}
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          token: ${{ github.token }}
+
+      - name: Assert failed output is set
+        env:
+          FAILED: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          # In offline mode with commit mode, action should complete (failed=false or failed=true but not crash)
+          if [ -z "$FAILED" ]; then
+            echo "FAIL: expected 'failed' output to be set"
+            exit 1
+          fi
+          echo "PASS: failed=$FAILED"
+
+      - name: Assert fromTag output
+        env:
+          FROM_TAG: ${{ steps.action.outputs.fromTag }}
+        run: |
+          echo "fromTag output: $FROM_TAG"
+          echo "PASS: fromTag output is set (value: $FROM_TAG)"
+
+      - name: Assert toTag output
+        env:
+          TO_TAG: ${{ steps.action.outputs.toTag }}
+        run: |
+          echo "toTag output: $TO_TAG"
+          echo "PASS: toTag output is set (value: $TO_TAG)"

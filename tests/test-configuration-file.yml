@@ -1,0 +1,53 @@
+name: Test configuration file and outputFile inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test tags and config file
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test"
+          git tag cfg-file-from-v0.0.1 HEAD~1 2>/dev/null || git tag cfg-file-from-v0.0.1 HEAD
+          git tag cfg-file-to-v0.0.2 HEAD
+          # Create a configuration file
+          cat > /tmp/changelog-config.json << 'EOF'
+          {
+            "categories": [
+              {
+                "title": "## 🚀 Features",
+                "labels": ["feature"]
+              }
+            ],
+            "template": "#{{CHANGELOG}}"
+          }
+          EOF
+          cp /tmp/changelog-config.json $GITHUB_WORKSPACE/changelog-config.json
+
+      - id: action
+        uses: .
+        with:
+          fromTag: cfg-file-from-v0.0.1
+          toTag: cfg-file-to-v0.0.2
+          configuration: changelog-config.json
+          outputFile: /tmp/changelog-output.md
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          token: ${{ github.token }}
+
+      - name: Assert failed output is set
+        env:
+          FAILED: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ -z "$FAILED" ]; then
+            echo "FAIL: expected 'failed' output to be set"
+            exit 1
+          fi
+          echo "PASS: action completed with failed=$FAILED"
