@@ -9,6 +9,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 | Version | Tag | Upstream commit |
 |---------|-----|-----------------|
 | v6.2.1 | [`v6.2.1`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/tree/v6.2.1) | [`bcae711`](https://github.com/mikepenz/release-changelog-builder-action/commit/bcae7115752d4ed746ff92feb666574428a79415) |
+| v6.2.2 | [`v6.2.2`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/tree/v6.2.2) | [`348e88f`](https://github.com/mikepenz/release-changelog-builder-action/commit/348e88fab4c37338b1e803ceb2d4a7a5db6c0833) |
 
 ## Privacy
 
