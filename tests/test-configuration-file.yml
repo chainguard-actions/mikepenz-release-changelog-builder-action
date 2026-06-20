@@ -1,0 +1,47 @@
+name: Test configuration file input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create configuration file
+        run: |
+          mkdir -p /tmp/rcb-config
+          cat > /tmp/rcb-config/changelog-config.json << 'EOF'
+          {
+            "categories": [
+              {
+                "title": "## 🚀 Features",
+                "labels": ["feature"]
+              },
+              {
+                "title": "## 🐛 Bug Fixes",
+                "labels": ["bug"]
+              }
+            ],
+            "template": "#{{CHANGELOG}}",
+            "pr_template": "- #{{TITLE}}"
+          }
+          EOF
+      - id: action
+        uses: .
+        with:
+          configuration: /tmp/rcb-config/changelog-config.json
+          offlineMode: "true"
+          commitMode: "true"
+          fromTag: "HEAD~1"
+          toTag: "HEAD"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Assert failed output is false or action ran
+        env:
+          FAILED: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS"

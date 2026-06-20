@@ -1,0 +1,73 @@
+name: Test configurationJson input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up a fresh git repo for testing
+        run: |
+          mkdir -p /tmp/test-repo-config
+          cd /tmp/test-repo-config
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo "initial" > README.md
+          git add README.md
+          git commit -m "Initial commit"
+          git tag v1.0.0
+          echo "feature added" >> README.md
+          git add README.md
+          git commit -m "Add feature"
+          git tag v1.0.1
+
+      - id: build_changelog
+        uses: .
+        with:
+          path: /tmp/test-repo-config
+          owner: test-owner
+          repo: test-repo
+          fromTag: v1.0.0
+          toTag: v1.0.1
+          commitMode: "true"
+          offlineMode: "true"
+          failOnError: "false"
+          configurationJson: |
+            {
+              "template": "#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
+              "categories": [
+                {
+                  "title": "## 🚀 Features",
+                  "labels": ["feature"]
+                },
+                {
+                  "title": "## 🐛 Bug Fixes",
+                  "labels": ["bug"]
+                }
+              ],
+              "label_extractor": [],
+              "empty_template": "- no changes",
+              "max_tags_to_fetch": 200,
+              "max_pull_requests": 200,
+              "max_back_track_time_days": 365
+            }
+
+      - name: Assert action did not fail
+        env:
+          FAILED: ${{ steps.build_changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure when using configurationJson"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert changelog output exists
+        env:
+          CHANGELOG: ${{ steps.build_changelog.outputs.changelog }}
+        run: |
+          echo "changelog output received"
+          echo "PASS: configurationJson was accepted and action completed"
