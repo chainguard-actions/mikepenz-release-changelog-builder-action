@@ -1,0 +1,109 @@
+name: Test includeOnlyPaths input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up isolated git repo for includeOnlyPaths test
+        run: |
+          set -e
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          git config --global safe.directory '*'
+
+          REPO_DIR="/tmp/rcba-paths-repo"
+          rm -rf "$REPO_DIR"
+          mkdir -p "$REPO_DIR"
+          cd "$REPO_DIR"
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial structure
+          mkdir -p src docs
+          echo "initial source file" > src/main.txt
+          echo "initial docs file" > docs/readme.txt
+          git add .
+          git commit -m "chore: initial commit for includeOnlyPaths test"
+          git tag v4.0.0
+
+          # Create commits touching different paths
+          echo "updated source file" >> src/main.txt
+          git add src/main.txt
+          git commit -m "feat: update source file"
+
+          echo "updated docs file" >> docs/readme.txt
+          git add docs/readme.txt
+          git commit -m "docs: update readme"
+
+          git tag v4.0.1
+
+          echo "Git log:"
+          git log --oneline
+          echo "Git tags:"
+          git tag -l
+
+      - id: action
+        uses: .
+        with:
+          path: /tmp/rcba-paths-repo
+          fromTag: v4.0.0
+          toTag: v4.0.1
+          offlineMode: "true"
+          mode: "COMMIT"
+          failOnError: "false"
+          owner: test-owner
+          repo: test-repo
+          token: dummy-token-for-offline-mode
+          includeOnlyPaths: |
+            src/**
+            docs/**
+
+      - name: Assert failed output is false
+        env:
+          ACTUAL: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed: $ACTUAL"
+          if [ "$ACTUAL" = "true" ]; then
+            echo "FAIL: action reported failure when using includeOnlyPaths"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert fromTag output is set
+        env:
+          ACTUAL: ${{ steps.action.outputs.fromTag }}
+        run: |
+          echo "fromTag: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: fromTag output is empty"
+            exit 1
+          fi
+          echo "PASS: fromTag is set to '$ACTUAL'"
+
+      - name: Assert toTag output is set
+        env:
+          ACTUAL: ${{ steps.action.outputs.toTag }}
+        run: |
+          echo "toTag: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: toTag output is empty"
+            exit 1
+          fi
+          echo "PASS: toTag is set to '$ACTUAL'"
+
+      - name: Assert changelog output is present
+        env:
+          ACTUAL: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "changelog: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: changelog output is empty"
+            exit 1
+          fi
+          echo "PASS: includeOnlyPaths was accepted and changelog was produced"

@@ -1,0 +1,94 @@
+name: Test configuration file input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up isolated git repo with configuration file
+        run: |
+          set -e
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          git config --global safe.directory '*'
+
+          REPO_DIR="/tmp/rcba-config-file-repo"
+          rm -rf "$REPO_DIR"
+          mkdir -p "$REPO_DIR"
+          cd "$REPO_DIR"
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create a changelog configuration file
+          cat > changelog-config.json << 'EOF'
+          {
+            "categories": [
+              {
+                "title": "## Features",
+                "labels": ["feature", "enhancement"]
+              },
+              {
+                "title": "## Bug Fixes",
+                "labels": ["bug", "fix"]
+              }
+            ],
+            "template": "#{{CHANGELOG}}",
+            "pr_template": "- #{{TITLE}}"
+          }
+          EOF
+
+          echo "base commit for configuration file test" > base.txt
+          git add .
+          git commit -m "chore: base commit for configuration file test"
+          git tag v3.0.0
+
+          echo "second commit for configuration file test" > second.txt
+          git add second.txt
+          git commit -m "feat: add feature for configuration file test"
+          git tag v3.0.1
+
+          echo "Git log:"
+          git log --oneline
+          echo "Git tags:"
+          git tag -l
+
+      - id: action
+        uses: .
+        with:
+          path: /tmp/rcba-config-file-repo
+          fromTag: v3.0.0
+          toTag: v3.0.1
+          offlineMode: "true"
+          mode: "COMMIT"
+          failOnError: "false"
+          owner: test-owner
+          repo: test-repo
+          token: dummy-token-for-offline-mode
+          configuration: "changelog-config.json"
+
+      - name: Assert failed output is false
+        env:
+          ACTUAL: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed: $ACTUAL"
+          if [ "$ACTUAL" = "true" ]; then
+            echo "FAIL: action reported failure when using configuration file"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert changelog output is present
+        env:
+          ACTUAL: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "changelog: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: changelog output is empty"
+            exit 1
+          fi
+          echo "PASS: configuration file was accepted and changelog was produced"

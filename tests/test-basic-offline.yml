@@ -1,0 +1,78 @@
+name: Test basic offline mode
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test commits and tags for changelog
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Create a file and commit it, then tag v0.0.1
+          echo "initial content" > test-file-offline.txt
+          git add test-file-offline.txt
+          git commit -m "chore: initial commit for offline test" --allow-empty
+          git tag v0.0.1-offline
+          # Create another commit so there's a diff between the two tags
+          echo "updated content" >> test-file-offline.txt
+          git add test-file-offline.txt
+          git commit -m "feat: add feature for offline test"
+          git tag v0.0.2-offline
+
+      - id: changelog
+        uses: .
+        with:
+          fromTag: v0.0.1-offline
+          toTag: v0.0.2-offline
+          offlineMode: "true"
+          mode: "COMMIT"
+          failOnError: "false"
+
+      - name: Assert failed output is false
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS: action did not fail"
+
+      - name: Assert fromTag output
+        env:
+          FROM_TAG: ${{ steps.changelog.outputs.fromTag }}
+        run: |
+          echo "fromTag: $FROM_TAG"
+          if [ -z "$FROM_TAG" ]; then
+            echo "FAIL: fromTag output is empty"
+            exit 1
+          fi
+          echo "PASS: fromTag is set to '$FROM_TAG'"
+
+      - name: Assert toTag output
+        env:
+          TO_TAG: ${{ steps.changelog.outputs.toTag }}
+        run: |
+          echo "toTag: $TO_TAG"
+          if [ -z "$TO_TAG" ]; then
+            echo "FAIL: toTag output is empty"
+            exit 1
+          fi
+          echo "PASS: toTag is set to '$TO_TAG'"
+
+      - name: Assert changelog output is present
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          if [ -z "$CHANGELOG" ]; then
+            echo "FAIL: changelog output is empty"
+            exit 1
+          fi
+          echo "PASS: changelog output is non-empty"

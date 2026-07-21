@@ -1,0 +1,69 @@
+name: Test outputFile feature
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test commits and tags for changelog
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Create a commit and tag v2.0.0
+          echo "output file test initial" > test-file-outputfile.txt
+          git add test-file-outputfile.txt
+          git commit -m "chore: initial commit for output file test" --allow-empty
+          git tag v2.0.0-outputfile
+          # Create another commit so there's content in the changelog
+          echo "output file test update" >> test-file-outputfile.txt
+          git add test-file-outputfile.txt
+          git commit -m "feat: add feature for output file test"
+          git tag v2.0.1-outputfile
+
+      - id: changelog
+        uses: .
+        with:
+          fromTag: v2.0.0-outputfile
+          toTag: v2.0.1-outputfile
+          offlineMode: "true"
+          mode: "COMMIT"
+          failOnError: "false"
+          outputFile: "CHANGELOG_TEST.md"
+
+      - name: Assert action did not fail
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS: action completed without failure"
+
+      - name: Assert changelog output is non-empty
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          if [ -z "$CHANGELOG" ]; then
+            echo "FAIL: changelog output is empty"
+            exit 1
+          fi
+          echo "PASS: changelog output is non-empty"
+
+      - name: Assert output file was created
+        run: |
+          echo "Checking for CHANGELOG_TEST.md..."
+          if [ ! -f "CHANGELOG_TEST.md" ]; then
+            echo "FAIL: outputFile CHANGELOG_TEST.md was not created"
+            exit 1
+          fi
+          echo "PASS: output file exists"
+          echo "--- File contents ---"
+          cat CHANGELOG_TEST.md
+          echo "--- End of file ---"

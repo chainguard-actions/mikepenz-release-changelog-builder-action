@@ -1,0 +1,76 @@
+name: Test baseUrl input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up isolated git repo for baseUrl test
+        run: |
+          set -e
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          git config --global safe.directory '*'
+
+          REPO_DIR="/tmp/rcba-baseurl-repo"
+          rm -rf "$REPO_DIR"
+          mkdir -p "$REPO_DIR"
+          cd "$REPO_DIR"
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          echo "base commit for baseUrl test" > base.txt
+          git add base.txt
+          git commit -m "chore: base commit for baseUrl test"
+          git tag v2.0.0
+
+          echo "second commit for baseUrl test" > second.txt
+          git add second.txt
+          git commit -m "feat: add feature for baseUrl test"
+          git tag v2.0.1
+
+          echo "Git log:"
+          git log --oneline
+          echo "Git tags:"
+          git tag -l
+
+      - id: action
+        uses: .
+        with:
+          path: /tmp/rcba-baseurl-repo
+          fromTag: v2.0.0
+          toTag: v2.0.1
+          offlineMode: "true"
+          mode: "COMMIT"
+          failOnError: "false"
+          owner: test-owner
+          repo: test-repo
+          token: dummy-token-for-offline-mode
+          baseUrl: "https://api.github.com"
+
+      - name: Assert failed output is false
+        env:
+          ACTUAL: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed: $ACTUAL"
+          if [ "$ACTUAL" = "true" ]; then
+            echo "FAIL: action reported failure when using baseUrl"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert changelog output is present
+        env:
+          ACTUAL: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "changelog: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: changelog output is empty"
+            exit 1
+          fi
+          echo "PASS: baseUrl was accepted and changelog was produced"

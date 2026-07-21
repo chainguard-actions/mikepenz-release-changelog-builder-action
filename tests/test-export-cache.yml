@@ -1,0 +1,98 @@
+name: Test export cache feature
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test commits and tags for changelog
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Create a commit and tag v3.0.0
+          echo "cache test initial" > test-file-cache.txt
+          git add test-file-cache.txt
+          git commit -m "chore: initial commit for cache test" --allow-empty
+          git tag v3.0.0-cache
+          # Create another commit between the tags
+          echo "cache test update" >> test-file-cache.txt
+          git add test-file-cache.txt
+          git commit -m "feat: add feature for cache test"
+          git tag v3.0.1-cache
+
+      - name: Run action with exportCache enabled
+        id: changelog_export
+        uses: .
+        with:
+          fromTag: v3.0.0-cache
+          toTag: v3.0.1-cache
+          offlineMode: "true"
+          mode: "COMMIT"
+          failOnError: "false"
+          exportCache: "true"
+
+      - name: Assert action did not fail
+        env:
+          FAILED: ${{ steps.changelog_export.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS: action completed without failure"
+
+      - name: Assert cache output is populated
+        env:
+          CACHE: ${{ steps.changelog_export.outputs.cache }}
+        run: |
+          echo "cache output: $CACHE"
+          if [ -z "$CACHE" ]; then
+            echo "FAIL: cache output is empty when exportCache=true"
+            exit 1
+          fi
+          # The cache output is a file path to the cache JSON file
+          if [ -f "$CACHE" ]; then
+            echo "PASS: cache output is a valid file path"
+            echo "Cache file size: $(wc -c < "$CACHE") bytes"
+          else
+            # Legacy: cache output may be JSON directly
+            echo "PASS: cache output is populated (non-file format)"
+          fi
+
+      - name: Re-use cache in second run
+        id: changelog_cached
+        uses: .
+        with:
+          fromTag: v3.0.0-cache
+          toTag: v3.0.1-cache
+          offlineMode: "true"
+          mode: "COMMIT"
+          failOnError: "false"
+          cache: ${{ steps.changelog_export.outputs.cache }}
+
+      - name: Assert second run did not fail
+        env:
+          FAILED: ${{ steps.changelog_cached.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: second run (with cache) reported failure"
+            exit 1
+          fi
+          echo "PASS: second run completed without failure"
+
+      - name: Assert second run produced changelog
+        env:
+          CHANGELOG: ${{ steps.changelog_cached.outputs.changelog }}
+        run: |
+          echo "changelog from cached run: $CHANGELOG"
+          if [ -z "$CHANGELOG" ]; then
+            echo "FAIL: cached run produced empty changelog"
+            exit 1
+          fi
+          echo "PASS: cached run produced non-empty changelog"

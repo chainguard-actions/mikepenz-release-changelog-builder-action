@@ -1,0 +1,61 @@
+name: Test failOnError false with empty range
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test tags pointing to the same commit
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Create a commit and tag both v4.0.0 and v4.0.1 on the same commit
+          # This tests the empty-range scenario (no commits between tags)
+          echo "failOnError test" > test-file-failonerror.txt
+          git add test-file-failonerror.txt
+          git commit -m "chore: commit for failOnError test" --allow-empty
+          git tag v4.0.0-failtest
+          git tag v4.0.1-failtest
+
+      - name: Run action with failOnError=false (empty range)
+        id: changelog
+        uses: .
+        with:
+          fromTag: v4.0.0-failtest
+          toTag: v4.0.1-failtest
+          offlineMode: "true"
+          mode: "COMMIT"
+          failOnError: "false"
+
+      - name: Assert workflow step succeeded (failOnError=false)
+        run: |
+          echo "Step completed without crashing the workflow"
+          echo "PASS: failOnError=false - workflow continued"
+
+      - name: Assert failed output is false (no error in empty range)
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed output: '$FAILED'"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure for empty range"
+            exit 1
+          fi
+          echo "PASS: failed=false, action handled empty range gracefully"
+
+      - name: Assert fromTag and toTag outputs are set
+        env:
+          FROM_TAG: ${{ steps.changelog.outputs.fromTag }}
+          TO_TAG: ${{ steps.changelog.outputs.toTag }}
+        run: |
+          echo "fromTag: $FROM_TAG"
+          echo "toTag: $TO_TAG"
+          if [ -z "$FROM_TAG" ] || [ -z "$TO_TAG" ]; then
+            echo "FAIL: fromTag or toTag output is empty"
+            exit 1
+          fi
+          echo "PASS: fromTag='$FROM_TAG' toTag='$TO_TAG'"

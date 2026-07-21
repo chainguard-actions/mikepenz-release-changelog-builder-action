@@ -1,0 +1,78 @@
+name: Test custom configurationJson
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test commits and tags for changelog
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Create a commit and tag v1.0.0
+          echo "config test initial" > test-file-config.txt
+          git add test-file-config.txt
+          git commit -m "chore: initial commit for config test" --allow-empty
+          git tag v1.0.0-config
+          # Create another commit between the tags
+          echo "config test update" >> test-file-config.txt
+          git add test-file-config.txt
+          git commit -m "feat: add feature for config test"
+          git tag v1.0.1-config
+
+      - id: changelog
+        uses: .
+        with:
+          fromTag: v1.0.0-config
+          toTag: v1.0.1-config
+          offlineMode: "true"
+          mode: "COMMIT"
+          failOnError: "false"
+          configurationJson: |
+            {
+              "template": "#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
+              "commit_template": "- #{{TITLE}} by @#{{AUTHOR}}",
+              "empty_template": "- no changes",
+              "categories": [
+                {
+                  "title": "## 🚀 Features",
+                  "labels": ["feature", "enhancement"]
+                },
+                {
+                  "title": "## 🐛 Bug Fixes",
+                  "labels": ["bug", "fix"]
+                }
+              ],
+              "label_extractor": [],
+              "duplicate_filter": {},
+              "transformers": [],
+              "max_tags_to_fetch": 200,
+              "max_pull_requests": 200,
+              "max_back_track_time_days": 365
+            }
+
+      - name: Assert action did not fail
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS: action completed without failure"
+
+      - name: Assert changelog output exists and is non-empty
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          if [ -z "$CHANGELOG" ]; then
+            echo "FAIL: changelog output is empty"
+            exit 1
+          fi
+          echo "PASS: configurationJson was accepted and action ran successfully with non-empty changelog"
