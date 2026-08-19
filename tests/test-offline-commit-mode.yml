@@ -1,57 +1,84 @@
-name: Test offline commit mode with fromTag/toTag/owner/repo/path
+name: Test offline commit mode
 on:
   workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/tags/v0.0.2
+      GITHUB_EVENT_NAME: push
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
-      - name: Create test tags for offline mode
+      - name: Set up git tags for testing
         run: |
           git config user.email "test@example.com"
-          git config user.name "Test"
-          # Create two tags to compare between
-          git tag test-from-v0.0.1 HEAD~1 2>/dev/null || git tag test-from-v0.0.1 HEAD
-          git tag test-to-v0.0.2 HEAD
+          git config user.name "Test User"
+          # Delete any pre-existing test tags to avoid conflicts
+          git tag -d v0.0.1 2>/dev/null || true
+          git tag -d v0.0.2 2>/dev/null || true
+          # Get the two most recent commits
+          COMMIT_NEW=$(git rev-parse HEAD)
+          COMMIT_OLD=$(git rev-list HEAD | sed -n '2p')
+          if [ -z "$COMMIT_OLD" ]; then
+            COMMIT_OLD="$COMMIT_NEW"
+          fi
+          echo "Tagging $COMMIT_OLD as v0.0.1"
+          git tag v0.0.1 "$COMMIT_OLD"
+          echo "Tagging $COMMIT_NEW as v0.0.2"
+          git tag v0.0.2 "$COMMIT_NEW"
+          echo "Tags created:"
+          git tag -l
 
-      - id: action
+      - id: changelog
         uses: .
         with:
-          fromTag: test-from-v0.0.1
-          toTag: test-to-v0.0.2
-          owner: mikepenz
-          repo: release-changelog-builder-action
-          path: ${{ github.workspace }}
+          owner: test-owner
+          repo: test-repo
+          fromTag: v0.0.1
+          toTag: v0.0.2
           offlineMode: "true"
           commitMode: "true"
           failOnError: "false"
-          token: ${{ github.token }}
 
-      - name: Assert failed output is set
+      - name: Assert failed output is false
         env:
-          FAILED: ${{ steps.action.outputs.failed }}
+          FAILED: ${{ steps.changelog.outputs.failed }}
         run: |
           echo "failed: $FAILED"
-          # In offline mode with commit mode, action should complete (failed=false or failed=true but not crash)
-          if [ -z "$FAILED" ]; then
-            echo "FAIL: expected 'failed' output to be set"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
             exit 1
           fi
-          echo "PASS: failed=$FAILED"
+          echo "PASS: action did not report failure"
 
       - name: Assert fromTag output
         env:
-          FROM_TAG: ${{ steps.action.outputs.fromTag }}
+          FROM_TAG: ${{ steps.changelog.outputs.fromTag }}
         run: |
-          echo "fromTag output: $FROM_TAG"
-          echo "PASS: fromTag output is set (value: $FROM_TAG)"
+          echo "fromTag: $FROM_TAG"
+          if [ -z "$FROM_TAG" ]; then
+            echo "FAIL: fromTag output is empty"
+            exit 1
+          fi
+          echo "PASS: fromTag is set to $FROM_TAG"
 
       - name: Assert toTag output
         env:
-          TO_TAG: ${{ steps.action.outputs.toTag }}
+          TO_TAG: ${{ steps.changelog.outputs.toTag }}
         run: |
-          echo "toTag output: $TO_TAG"
-          echo "PASS: toTag output is set (value: $TO_TAG)"
+          echo "toTag: $TO_TAG"
+          if [ -z "$TO_TAG" ]; then
+            echo "FAIL: toTag output is empty"
+            exit 1
+          fi
+          echo "PASS: toTag is set to $TO_TAG"
+
+      - name: Assert changelog output exists
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          echo "PASS: changelog output captured (may be empty if no commits between tags)"

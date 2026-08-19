@@ -1,0 +1,81 @@
+name: Test basic offline commit mode
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test commits and tags
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          git config --global --add safe.directory '*'
+          # Force-create tags to avoid conflicts with existing tags
+          git tag -f v0.0.1 HEAD
+          # Create a new commit
+          git commit --allow-empty -m "feat: add new feature for testing"
+          git tag -f v0.0.2 HEAD
+
+      - id: action
+        uses: .
+        with:
+          fromTag: v0.0.1
+          toTag: v0.0.2
+          offlineMode: "true"
+          commitMode: "true"
+          configurationJson: |
+            {
+              "template": "#{{CHANGELOG}}#{{UNCATEGORIZED}}",
+              "pr_template": "- #{{TITLE}}",
+              "empty_template": "- no changes",
+              "categories": [],
+              "label_extractor": []
+            }
+
+      - name: Assert failed is false
+        env:
+          FAILED: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert changelog is non-empty
+        env:
+          CHANGELOG: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          if [ -z "$CHANGELOG" ]; then
+            echo "FAIL: changelog is empty"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert fromTag output
+        env:
+          FROM_TAG: ${{ steps.action.outputs.fromTag }}
+        run: |
+          echo "fromTag: $FROM_TAG"
+          if [ "$FROM_TAG" != "v0.0.1" ]; then
+            echo "FAIL: expected fromTag=v0.0.1, got: $FROM_TAG"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert toTag output
+        env:
+          TO_TAG: ${{ steps.action.outputs.toTag }}
+        run: |
+          echo "toTag: $TO_TAG"
+          if [ "$TO_TAG" != "v0.0.2" ]; then
+            echo "FAIL: expected toTag=v0.0.2, got: $TO_TAG"
+            exit 1
+          fi
+          echo "PASS"

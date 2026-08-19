@@ -1,0 +1,78 @@
+name: Test outputFile feature
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test commits and tags
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          git config --global --add safe.directory '*'
+          git tag -f v2.0.0 HEAD
+          git commit --allow-empty -m "chore: update dependencies"
+          git commit --allow-empty -m "docs: improve README"
+          git tag -f v2.1.0 HEAD
+
+      - id: action
+        uses: .
+        with:
+          fromTag: v2.0.0
+          toTag: v2.1.0
+          offlineMode: "true"
+          commitMode: "true"
+          outputFile: CHANGELOG_TEST.md
+          configurationJson: |
+            {
+              "template": "## Release Notes\n#{{CHANGELOG}}#{{UNCATEGORIZED}}",
+              "pr_template": "- #{{TITLE}}",
+              "empty_template": "- no changes",
+              "categories": [],
+              "label_extractor": []
+            }
+
+      - name: Assert failed is false
+        env:
+          FAILED: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert output file was created
+        run: |
+          if [ ! -f "CHANGELOG_TEST.md" ]; then
+            echo "FAIL: output file CHANGELOG_TEST.md was not created"
+            exit 1
+          fi
+          echo "Output file contents:"
+          cat CHANGELOG_TEST.md
+          echo "PASS: output file exists"
+
+      - name: Assert output file is non-empty
+        run: |
+          CONTENT=$(cat CHANGELOG_TEST.md)
+          if [ -z "$CONTENT" ]; then
+            echo "FAIL: output file is empty"
+            exit 1
+          fi
+          echo "PASS: output file has content"
+
+      - name: Assert changelog output is non-empty
+        env:
+          CHANGELOG: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "changelog output: $CHANGELOG"
+          if [ -z "$CHANGELOG" ]; then
+            echo "FAIL: changelog output is empty"
+            exit 1
+          fi
+          echo "PASS"

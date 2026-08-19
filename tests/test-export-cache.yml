@@ -1,0 +1,102 @@
+name: Test exportCache feature
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      RUNNER_TEMP: /tmp/runner-temp
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test commits and tags
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          git config --global --add safe.directory '*'
+          mkdir -p /tmp/runner-temp
+          git tag -f v3.0.0 HEAD
+          git commit --allow-empty -m "feat: initial feature"
+          git tag -f v3.1.0 HEAD
+
+      - name: Run action with exportCache enabled
+        id: first_run
+        uses: .
+        with:
+          fromTag: v3.0.0
+          toTag: v3.1.0
+          offlineMode: "true"
+          commitMode: "true"
+          exportCache: "true"
+          configurationJson: |
+            {
+              "template": "#{{CHANGELOG}}#{{UNCATEGORIZED}}",
+              "pr_template": "- #{{TITLE}}",
+              "empty_template": "- no changes",
+              "categories": [],
+              "label_extractor": []
+            }
+
+      - name: Assert first run succeeded
+        env:
+          FAILED: ${{ steps.first_run.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: first run reported failure"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert cache output is non-empty
+        env:
+          CACHE: ${{ steps.first_run.outputs.cache }}
+        run: |
+          echo "cache: $CACHE"
+          if [ -z "$CACHE" ]; then
+            echo "FAIL: cache output is empty"
+            exit 1
+          fi
+          echo "PASS: cache output is non-empty"
+
+      - name: Run action with cache from previous run
+        id: second_run
+        uses: .
+        with:
+          fromTag: v3.0.0
+          toTag: v3.1.0
+          offlineMode: "true"
+          commitMode: "true"
+          cache: ${{ steps.first_run.outputs.cache }}
+          configurationJson: |
+            {
+              "template": "## Cached Run\n#{{CHANGELOG}}#{{UNCATEGORIZED}}",
+              "pr_template": "- #{{TITLE}}",
+              "empty_template": "- no changes",
+              "categories": [],
+              "label_extractor": []
+            }
+
+      - name: Assert second run succeeded
+        env:
+          FAILED: ${{ steps.second_run.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: second run (with cache) reported failure"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert second run changelog is non-empty
+        env:
+          CHANGELOG: ${{ steps.second_run.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          if [ -z "$CHANGELOG" ]; then
+            echo "FAIL: second run changelog is empty"
+            exit 1
+          fi
+          echo "PASS"

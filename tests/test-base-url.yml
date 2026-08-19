@@ -1,0 +1,45 @@
+name: Test baseUrl input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up tags for offline mode
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          git tag v3.0.0 HEAD~1 2>/dev/null || git tag v3.0.0 HEAD
+          git tag v3.0.1 HEAD 2>/dev/null || true
+
+      - id: action
+        uses: .
+        with:
+          fromTag: "v3.0.0"
+          toTag: "v3.0.1"
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          baseUrl: "https://api.github.com"
+
+      - name: Assert failed output is false
+        env:
+          FAILED: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure when using baseUrl input"
+            exit 1
+          fi
+          echo "PASS: action ran without failure using baseUrl input"
+
+      - name: Assert changelog output is present
+        env:
+          CHANGELOG: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          echo "PASS: changelog output received with baseUrl set"

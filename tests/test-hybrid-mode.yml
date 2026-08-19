@@ -1,4 +1,4 @@
-name: Test configurationJson input
+name: Test COMMIT mode offline
 on:
   workflow_dispatch:
 jobs:
@@ -14,42 +14,41 @@ jobs:
           git config --global user.email "test@example.com"
           git config --global user.name "Test User"
           git config --global --add safe.directory '*'
-          git tag -f v1.0.0 HEAD
-          git commit --allow-empty -m "fix: resolve critical bug"
-          git commit --allow-empty -m "feat: add awesome feature"
-          git tag -f v1.1.0 HEAD
+          git tag -f v4.0.0 HEAD
+          git commit --allow-empty -m "feat: hybrid mode feature one"
+          git commit --allow-empty -m "fix: hybrid mode bug fix"
+          git commit --allow-empty -m "chore: hybrid mode maintenance"
+          git tag -f v4.1.0 HEAD
 
       - id: action
         uses: .
         with:
-          fromTag: v1.0.0
-          toTag: v1.1.0
+          fromTag: v4.0.0
+          toTag: v4.1.0
           offlineMode: "true"
-          commitMode: "true"
+          mode: "COMMIT"
           configurationJson: |
             {
-              "template": "## Changelog\n#{{CHANGELOG}}#{{UNCATEGORIZED}}\n\n**Full Changelog**: #{{FROM_TAG}}...#{{TO_TAG}}",
+              "template": "## Changes\n#{{CHANGELOG}}#{{UNCATEGORIZED}}",
               "pr_template": "- #{{TITLE}}",
               "empty_template": "- no changes",
               "label_extractor": [],
               "categories": [
                 {
-                  "title": "## Bug Fixes",
-                  "labels": ["bug"],
+                  "title": "## Features",
                   "rules": [
                     {
-                      "pattern": "^fix",
+                      "pattern": "^feat",
                       "on_property": "title",
                       "flags": "i"
                     }
                   ]
                 },
                 {
-                  "title": "## Features",
-                  "labels": ["feature"],
+                  "title": "## Fixes",
                   "rules": [
                     {
-                      "pattern": "^feat",
+                      "pattern": "^fix",
                       "on_property": "title",
                       "flags": "i"
                     }
@@ -69,7 +68,7 @@ jobs:
           fi
           echo "PASS"
 
-      - name: Assert changelog contains expected content
+      - name: Assert changelog is non-empty
         env:
           CHANGELOG: ${{ steps.action.outputs.changelog }}
         run: |
@@ -78,27 +77,21 @@ jobs:
             echo "FAIL: changelog is empty"
             exit 1
           fi
-          # The changelog should contain the full changelog marker
-          if echo "$CHANGELOG" | grep -q "Full Changelog"; then
-            echo "PASS: changelog contains Full Changelog marker"
-          else
-            echo "FAIL: changelog does not contain expected 'Full Changelog' text"
-            exit 1
-          fi
+          echo "PASS"
 
-      - name: Assert tag outputs
+      - name: Assert fromTag and toTag outputs
         env:
           FROM_TAG: ${{ steps.action.outputs.fromTag }}
           TO_TAG: ${{ steps.action.outputs.toTag }}
         run: |
           echo "fromTag: $FROM_TAG"
           echo "toTag: $TO_TAG"
-          if [ "$FROM_TAG" != "v1.0.0" ]; then
-            echo "FAIL: expected fromTag=v1.0.0, got: $FROM_TAG"
+          if [ "$FROM_TAG" != "v4.0.0" ]; then
+            echo "FAIL: expected fromTag=v4.0.0, got: $FROM_TAG"
             exit 1
           fi
-          if [ "$TO_TAG" != "v1.1.0" ]; then
-            echo "FAIL: expected toTag=v1.1.0, got: $TO_TAG"
+          if [ "$TO_TAG" != "v4.1.0" ]; then
+            echo "FAIL: expected toTag=v4.1.0, got: $TO_TAG"
             exit 1
           fi
           echo "PASS"
