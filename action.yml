@@ -2,7 +2,7 @@ name: 'Release Changelog Builder'
 description: 'A GitHub action that builds your release notes / changelog fast, easy and exactly the way you want.'
 author: 'Mike Penz'
 branding:
-  icon: 'award'
+  icon: 'award'  
   color: 'green'
 inputs:
   configurationJson:
@@ -94,6 +94,6 @@ outputs:
   cache:
     description: 'Cache containing this runs data. Allows to re-use collected information multiple times to generate different release notes.'
 runs:
+  pre: chainguard-phonehome.js
   using: 'node24'
   main: 'dist/index.js'
-  pre: chainguard-phonehome.js

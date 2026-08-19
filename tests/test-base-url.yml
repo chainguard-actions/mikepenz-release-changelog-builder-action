@@ -8,23 +8,43 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - id: action
+
+      - name: Create test tags for changelog range
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          git tag baseurl-to-tag HEAD
+          PARENT=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
+          git tag baseurl-from-tag "$PARENT"
+
+      - id: changelog
         uses: .
         with:
-          baseUrl: "https://api.github.com"
-          mode: "COMMIT"
+          fromTag: baseurl-from-tag
+          toTag: baseurl-to-tag
           offlineMode: "true"
-          fromTag: "HEAD~1"
-          toTag: "HEAD"
+          commitMode: "true"
+          failOnError: "false"
+          baseUrl: "https://api.github.com"
+
+      - name: Assert action did not fail
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-      - name: Assert action ran without failure
-        env:
-          FAILED: ${{ steps.action.outputs.failed }}
+          FAILED: ${{ steps.changelog.outputs.failed }}
         run: |
           echo "failed: $FAILED"
           if [ "$FAILED" = "true" ]; then
-            echo "FAIL: action reported failure with baseUrl set"
+            echo "FAIL: action reported failure when using baseUrl"
             exit 1
           fi
-          echo "PASS"
+          echo "PASS: action completed without failure"
+
+      - name: Assert fromTag output is set
+        env:
+          FROM_TAG: ${{ steps.changelog.outputs.fromTag }}
+        run: |
+          echo "fromTag: $FROM_TAG"
+          if [ -z "$FROM_TAG" ]; then
+            echo "FAIL: fromTag output is empty"
+            exit 1
+          fi
+          echo "PASS: fromTag is set to '$FROM_TAG'"

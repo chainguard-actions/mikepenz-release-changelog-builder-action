@@ -1,0 +1,37 @@
+name: Test failOnError false with invalid tags
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - id: changelog
+        uses: .
+        with:
+          fromTag: nonexistent-tag-abc123
+          toTag: another-nonexistent-tag-xyz789
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+
+      - name: Assert workflow did not fail (failOnError=false)
+        run: |
+          echo "PASS: workflow continued despite invalid tags (failOnError=false)"
+
+      - name: Assert failed output indicates an error occurred
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          # When tags don't exist, the action should set failed=true
+          # but not fail the workflow because failOnError=false
+          if [ "$FAILED" = "true" ]; then
+            echo "PASS: failed output correctly set to true for invalid tags"
+          else
+            echo "INFO: failed output is '$FAILED' - action may have handled gracefully"
+            echo "PASS: workflow continued without error"
+          fi

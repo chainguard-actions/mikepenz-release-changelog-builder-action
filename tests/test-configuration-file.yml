@@ -6,42 +6,45 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Create configuration file
+        with:
+          fetch-depth: 0
+
+      - name: Create test tags for changelog range
         run: |
-          mkdir -p /tmp/rcb-config
-          cat > /tmp/rcb-config/changelog-config.json << 'EOF'
-          {
-            "categories": [
-              {
-                "title": "## 🚀 Features",
-                "labels": ["feature"]
-              },
-              {
-                "title": "## 🐛 Bug Fixes",
-                "labels": ["bug"]
-              }
-            ],
-            "template": "#{{CHANGELOG}}",
-            "pr_template": "- #{{TITLE}}"
-          }
-          EOF
-      - id: action
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          git tag config-file-to-tag HEAD
+          PARENT=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
+          git tag config-file-from-tag "$PARENT"
+
+      - id: changelog
         uses: .
         with:
-          configuration: /tmp/rcb-config/changelog-config.json
+          fromTag: config-file-from-tag
+          toTag: config-file-to-tag
           offlineMode: "true"
           commitMode: "true"
-          fromTag: "HEAD~1"
-          toTag: "HEAD"
+          failOnError: "false"
+          configuration: "hardened/tests/fixtures/changelog-config.json"
+
+      - name: Assert action did not fail
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-      - name: Assert failed output is false or action ran
-        env:
-          FAILED: ${{ steps.action.outputs.failed }}
+          FAILED: ${{ steps.changelog.outputs.failed }}
         run: |
           echo "failed: $FAILED"
           if [ "$FAILED" = "true" ]; then
-            echo "FAIL: action reported failure"
+            echo "FAIL: action reported failure when using configuration file"
             exit 1
           fi
-          echo "PASS"
+          echo "PASS: action completed without failure"
+
+      - name: Assert fromTag output is set
+        env:
+          FROM_TAG: ${{ steps.changelog.outputs.fromTag }}
+        run: |
+          echo "fromTag: $FROM_TAG"
+          if [ -z "$FROM_TAG" ]; then
+            echo "FAIL: fromTag output is empty"
+            exit 1
+          fi
+          echo "PASS: fromTag is set to '$FROM_TAG'"

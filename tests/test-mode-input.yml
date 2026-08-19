@@ -1,4 +1,4 @@
-name: Test includeOnlyPaths input
+name: Test mode input
 on:
   workflow_dispatch:
 jobs:
@@ -13,21 +13,18 @@ jobs:
         run: |
           git config user.email "test@example.com"
           git config user.name "Test User"
-          git tag paths-to-tag HEAD
+          git tag mode-to-tag HEAD
           PARENT=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
-          git tag paths-from-tag "$PARENT"
+          git tag mode-from-tag "$PARENT"
 
       - id: changelog
         uses: .
         with:
-          fromTag: paths-from-tag
-          toTag: paths-to-tag
+          fromTag: mode-from-tag
+          toTag: mode-to-tag
           offlineMode: "true"
-          commitMode: "true"
+          mode: "COMMIT"
           failOnError: "false"
-          includeOnlyPaths: |
-            src/**
-            lib/**
 
       - name: Assert action did not fail
         env:
@@ -35,10 +32,21 @@ jobs:
         run: |
           echo "failed: $FAILED"
           if [ "$FAILED" = "true" ]; then
-            echo "FAIL: action reported failure when using includeOnlyPaths"
+            echo "FAIL: action reported failure when using mode=COMMIT"
             exit 1
           fi
           echo "PASS: action completed without failure"
+
+      - name: Assert fromTag output is set
+        env:
+          FROM_TAG: ${{ steps.changelog.outputs.fromTag }}
+        run: |
+          echo "fromTag: $FROM_TAG"
+          if [ -z "$FROM_TAG" ]; then
+            echo "FAIL: fromTag output is empty"
+            exit 1
+          fi
+          echo "PASS: fromTag is set to '$FROM_TAG'"
 
       - name: Assert toTag output is set
         env:

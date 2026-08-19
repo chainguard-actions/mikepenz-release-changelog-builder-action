@@ -1,4 +1,4 @@
-name: Test includeOnlyPaths input
+name: Test basic offline commit mode
 on:
   workflow_dispatch:
 jobs:
@@ -13,32 +13,48 @@ jobs:
         run: |
           git config user.email "test@example.com"
           git config user.name "Test User"
-          git tag paths-to-tag HEAD
+          # Create a lightweight tag at the current HEAD for toTag
+          git tag test-to-tag HEAD
+          # Create a lightweight tag one commit back for fromTag (or same if only one commit)
           PARENT=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
-          git tag paths-from-tag "$PARENT"
+          git tag test-from-tag "$PARENT"
 
       - id: changelog
         uses: .
         with:
-          fromTag: paths-from-tag
-          toTag: paths-to-tag
+          fromTag: test-from-tag
+          toTag: test-to-tag
           offlineMode: "true"
           commitMode: "true"
           failOnError: "false"
-          includeOnlyPaths: |
-            src/**
-            lib/**
 
-      - name: Assert action did not fail
+      - name: Assert failed output is false or changelog is present
         env:
           FAILED: ${{ steps.changelog.outputs.failed }}
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+          FROM_TAG: ${{ steps.changelog.outputs.fromTag }}
+          TO_TAG: ${{ steps.changelog.outputs.toTag }}
         run: |
           echo "failed: $FAILED"
+          echo "fromTag: $FROM_TAG"
+          echo "toTag: $TO_TAG"
+          echo "changelog: $CHANGELOG"
           if [ "$FAILED" = "true" ]; then
-            echo "FAIL: action reported failure when using includeOnlyPaths"
+            echo "FAIL: action reported failure"
             exit 1
           fi
           echo "PASS: action completed without failure"
+
+      - name: Assert fromTag output is set
+        env:
+          FROM_TAG: ${{ steps.changelog.outputs.fromTag }}
+        run: |
+          echo "fromTag: $FROM_TAG"
+          if [ -z "$FROM_TAG" ]; then
+            echo "FAIL: fromTag output is empty"
+            exit 1
+          fi
+          echo "PASS: fromTag is set to '$FROM_TAG'"
 
       - name: Assert toTag output is set
         env:

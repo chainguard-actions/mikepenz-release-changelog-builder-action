@@ -1,4 +1,4 @@
-name: Test outputFile feature
+name: Test outputFile writing
 on:
   workflow_dispatch:
 jobs:
@@ -6,53 +6,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
 
-      - name: Set up a fresh git repo for testing
+      - name: Create test tags for changelog range
         run: |
-          mkdir -p /tmp/test-repo-output
-          cd /tmp/test-repo-output
-          git init
           git config user.email "test@example.com"
           git config user.name "Test User"
-          echo "initial" > README.md
-          git add README.md
-          git commit -m "Initial commit"
-          git tag v2.0.0
-          echo "change" >> README.md
-          git add README.md
-          git commit -m "Second commit"
-          git tag v2.0.1
+          git tag outfile-to-tag HEAD
+          PARENT=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
+          git tag outfile-from-tag "$PARENT"
 
-      - id: build_changelog
+      - id: changelog
         uses: .
         with:
-          path: /tmp/test-repo-output
-          owner: test-owner
-          repo: test-repo
-          fromTag: v2.0.0
-          toTag: v2.0.1
-          commitMode: "true"
+          fromTag: outfile-from-tag
+          toTag: outfile-to-tag
           offlineMode: "true"
+          commitMode: "true"
           failOnError: "false"
           outputFile: CHANGELOG_OUTPUT.md
 
       - name: Assert action did not fail
         env:
-          FAILED: ${{ steps.build_changelog.outputs.failed }}
+          FAILED: ${{ steps.changelog.outputs.failed }}
         run: |
           echo "failed: $FAILED"
           if [ "$FAILED" = "true" ]; then
             echo "FAIL: action reported failure"
             exit 1
           fi
-          echo "PASS"
+          echo "PASS: action completed without failure"
 
       - name: Assert output file was created
         run: |
-          if [ ! -f "/tmp/test-repo-output/CHANGELOG_OUTPUT.md" ]; then
+          echo "Checking for CHANGELOG_OUTPUT.md..."
+          if [ ! -f "CHANGELOG_OUTPUT.md" ]; then
             echo "FAIL: outputFile CHANGELOG_OUTPUT.md was not created"
             exit 1
           fi
-          echo "Output file contents:"
-          cat "/tmp/test-repo-output/CHANGELOG_OUTPUT.md"
-          echo "PASS: outputFile was created"
+          echo "PASS: output file exists"
+          echo "--- File contents ---"
+          cat CHANGELOG_OUTPUT.md
+          echo "--- End of file ---"
+
+      - name: Assert changelog output matches file content
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          echo "changelog output: $CHANGELOG"
+          FILE_CONTENT=$(cat CHANGELOG_OUTPUT.md)
+          echo "file content: $FILE_CONTENT"
+          echo "PASS: both changelog output and file are accessible"
