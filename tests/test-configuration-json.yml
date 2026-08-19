@@ -4,48 +4,76 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_REF: refs/tags/v2.0.0
-      GITHUB_EVENT_NAME: push
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
-      - name: Setup git tags for range
+      - name: Configure git and create unique test tags for changelog range
         run: |
           git config user.email "test@example.com"
-          git config user.name "Test"
-          git tag v1.0.0 HEAD~1 2>/dev/null || git tag v1.0.0 HEAD
-          git tag v2.0.0 HEAD 2>/dev/null || true
+          git config user.name "Test User"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          TS=$(date +%s)
+          FROM_TAG="test-cfgjson-from-${TS}"
+          TO_TAG="test-cfgjson-to-${TS}"
+          git tag "$FROM_TAG" HEAD
+          echo "config-json-marker-${TS}" > test-config-json-marker.txt
+          git add test-config-json-marker.txt
+          git commit -m "feat: add marker file for config json test"
+          git tag "$TO_TAG" HEAD
+          echo "FROM_TAG=$FROM_TAG" >> "$GITHUB_ENV"
+          echo "TO_TAG=$TO_TAG" >> "$GITHUB_ENV"
 
       - id: changelog
         uses: .
         with:
-          fromTag: v1.0.0
-          toTag: v2.0.0
+          fromTag: ${{ env.FROM_TAG }}
+          toTag: ${{ env.TO_TAG }}
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
           configurationJson: |
             {
+              "template": "#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
               "categories": [
                 {
                   "title": "## 🚀 Features",
-                  "labels": ["feature"]
+                  "labels": ["feature", "enhancement"]
                 },
                 {
                   "title": "## 🐛 Bug Fixes",
-                  "labels": ["bug"]
+                  "labels": ["fix", "bug"]
                 }
               ],
-              "template": "#{{CHANGELOG}}",
-              "pr_template": "- #{{TITLE}}"
+              "label_extractor": [],
+              "duplicate_filter": {},
+              "transformers": [],
+              "max_tags_to_fetch": 200,
+              "max_pull_requests": 200,
+              "max_back_track_time_days": 365
             }
-          mode: COMMIT
-          offlineMode: "true"
-          failOnError: "false"
 
-      - name: Assert action completed
+      - name: Assert action did not fail
         env:
           FAILED: ${{ steps.changelog.outputs.failed }}
         run: |
           echo "failed: $FAILED"
-          echo "PASS: action completed with configurationJson input"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure when using configurationJson"
+            exit 1
+          fi
+          echo "PASS: action succeeded with configurationJson"
+
+      - name: Assert fromTag and toTag outputs
+        env:
+          FROM_TAG_OUT: ${{ steps.changelog.outputs.fromTag }}
+          TO_TAG_OUT: ${{ steps.changelog.outputs.toTag }}
+        run: |
+          echo "fromTag: $FROM_TAG_OUT"
+          echo "toTag: $TO_TAG_OUT"
+          if [ -z "$FROM_TAG_OUT" ] || [ -z "$TO_TAG_OUT" ]; then
+            echo "FAIL: fromTag or toTag output is empty"
+            exit 1
+          fi
+          echo "PASS"

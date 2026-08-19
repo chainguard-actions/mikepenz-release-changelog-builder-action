@@ -1,59 +1,86 @@
-name: Test exportCache and cache inputs
+name: Test export cache feature
 on:
   workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      GITHUB_REF: refs/tags/v2.0.0
-      GITHUB_EVENT_NAME: push
+      RUNNER_TEMP: /tmp
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
-      - name: Setup git tags for range
+      - name: Configure git and create unique test tags for changelog range
         run: |
           git config user.email "test@example.com"
-          git config user.name "Test"
-          git tag v1.0.0 HEAD~1 2>/dev/null || git tag v1.0.0 HEAD
-          git tag v2.0.0 HEAD 2>/dev/null || true
+          git config user.name "Test User"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          TS=$(date +%s)
+          FROM_TAG="test-cache-from-${TS}"
+          TO_TAG="test-cache-to-${TS}"
+          git tag "$FROM_TAG" HEAD
+          echo "export-cache-marker-${TS}" > test-export-cache-marker.txt
+          git add test-export-cache-marker.txt
+          git commit -m "chore: add marker file for export cache test"
+          git tag "$TO_TAG" HEAD
+          echo "FROM_TAG=$FROM_TAG" >> "$GITHUB_ENV"
+          echo "TO_TAG=$TO_TAG" >> "$GITHUB_ENV"
 
-      # First run: export cache
-      - id: first-run
+      - id: changelog
         uses: .
         with:
-          fromTag: v1.0.0
-          toTag: v2.0.0
-          mode: COMMIT
+          fromTag: ${{ env.FROM_TAG }}
+          toTag: ${{ env.TO_TAG }}
           offlineMode: "true"
+          commitMode: "true"
           failOnError: "false"
           exportCache: "true"
 
-      - name: Show first run cache output
+      - name: Assert action did not fail
         env:
-          CACHE_OUTPUT: ${{ steps.first-run.outputs.cache }}
-          FAILED: ${{ steps.first-run.outputs.failed }}
+          FAILED: ${{ steps.changelog.outputs.failed }}
         run: |
           echo "failed: $FAILED"
-          echo "cache output length: ${#CACHE_OUTPUT}"
-          echo "PASS: first run with exportCache completed"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS"
 
-      # Second run: consume cache
-      - id: second-run
-        uses: .
-        with:
-          fromTag: v1.0.0
-          toTag: v2.0.0
-          mode: COMMIT
-          offlineMode: "true"
-          failOnError: "false"
-          exportCache: "true"
-          cache: ${{ steps.first-run.outputs.cache }}
-
-      - name: Assert second run completed
+      - name: Assert cache output is present
         env:
-          FAILED: ${{ steps.second-run.outputs.failed }}
+          CACHE: ${{ steps.changelog.outputs.cache }}
         run: |
-          echo "failed: $FAILED"
-          echo "PASS: second run with cache input completed"
+          echo "cache output: $CACHE"
+          if [ -z "$CACHE" ]; then
+            echo "FAIL: cache output is empty when exportCache=true"
+            exit 1
+          fi
+          echo "PASS: cache output is non-empty"
+
+      - name: Assert cache file contains valid JSON
+        env:
+          CACHE: ${{ steps.changelog.outputs.cache }}
+        run: |
+          echo "Validating cache content..."
+          # The cache output is a file path to the JSON cache file
+          if echo "$CACHE" | grep -q '^/'; then
+            # It's a file path
+            if [ ! -f "$CACHE" ]; then
+              echo "FAIL: cache file does not exist at path: $CACHE"
+              exit 1
+            fi
+            if ! python3 -c "import sys, json; json.load(open('$CACHE'))" 2>/dev/null; then
+              echo "FAIL: cache file does not contain valid JSON"
+              exit 1
+            fi
+            echo "PASS: cache file exists and contains valid JSON"
+          else
+            # Legacy: cache is inline JSON
+            if ! echo "$CACHE" | python3 -c "import sys, json; json.load(sys.stdin)" 2>/dev/null; then
+              echo "FAIL: cache output is not valid JSON"
+              exit 1
+            fi
+            echo "PASS: cache output is valid JSON"
+          fi

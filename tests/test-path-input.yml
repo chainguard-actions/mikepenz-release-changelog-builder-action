@@ -1,4 +1,4 @@
-name: Test configuration file input
+name: Test path input (checkout directory)
 on:
   workflow_dispatch:
 jobs:
@@ -15,39 +15,15 @@ jobs:
           git config user.name "Test User"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           TS=$(date +%s)
-          FROM_TAG="test-cfg-from-${TS}"
-          TO_TAG="test-cfg-to-${TS}"
+          FROM_TAG="test-path-from-${TS}"
+          TO_TAG="test-path-to-${TS}"
           git tag "$FROM_TAG" HEAD
-          echo "config-file-marker-${TS}" > test-config-file-marker.txt
-          git add test-config-file-marker.txt
-          git commit -m "feat: add marker file for configuration file test"
+          echo "path-input-marker-${TS}" > test-path-marker.txt
+          git add test-path-marker.txt
+          git commit -m "chore: add marker file for path input test"
           git tag "$TO_TAG" HEAD
           echo "FROM_TAG=$FROM_TAG" >> "$GITHUB_ENV"
           echo "TO_TAG=$TO_TAG" >> "$GITHUB_ENV"
-
-      - name: Create configuration file
-        run: |
-          cat > "$GITHUB_WORKSPACE/test-changelog-config.json" << 'EOF'
-          {
-            "template": "#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
-            "categories": [
-              {
-                "title": "## 🚀 Features",
-                "labels": ["feature", "enhancement"]
-              },
-              {
-                "title": "## 🐛 Bug Fixes",
-                "labels": ["fix", "bug"]
-              }
-            ],
-            "label_extractor": [],
-            "duplicate_filter": {},
-            "transformers": [],
-            "max_tags_to_fetch": 200,
-            "max_pull_requests": 200,
-            "max_back_track_time_days": 365
-          }
-          EOF
 
       - id: changelog
         uses: .
@@ -57,7 +33,7 @@ jobs:
           offlineMode: "true"
           commitMode: "true"
           failOnError: "false"
-          configuration: "test-changelog-config.json"
+          path: ${{ github.workspace }}
 
       - name: Assert action did not fail
         env:
@@ -65,10 +41,10 @@ jobs:
         run: |
           echo "failed: $FAILED"
           if [ "$FAILED" = "true" ]; then
-            echo "FAIL: action reported failure when using configuration file"
+            echo "FAIL: action reported failure when using path input"
             exit 1
           fi
-          echo "PASS: action succeeded with configuration file"
+          echo "PASS: action succeeded with path input"
 
       - name: Assert fromTag and toTag outputs
         env:

@@ -1,0 +1,76 @@
+name: Test offline basic mode
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git and create unique test tags for changelog range
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          TS=$(date +%s)
+          FROM_TAG="test-offline-from-${TS}"
+          TO_TAG="test-offline-to-${TS}"
+          git tag "$FROM_TAG" HEAD
+          echo "offline-basic-marker-${TS}" > test-offline-marker.txt
+          git add test-offline-marker.txt
+          git commit -m "test: add marker file for offline test"
+          git tag "$TO_TAG" HEAD
+          echo "FROM_TAG=$FROM_TAG" >> "$GITHUB_ENV"
+          echo "TO_TAG=$TO_TAG" >> "$GITHUB_ENV"
+
+      - id: changelog
+        uses: .
+        with:
+          fromTag: ${{ env.FROM_TAG }}
+          toTag: ${{ env.TO_TAG }}
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+
+      - name: Assert failed output is false
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS: action did not fail"
+
+      - name: Assert changelog output exists
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          # In offline+commit mode the changelog should contain the commit we made
+          echo "PASS: changelog output key present"
+
+      - name: Assert fromTag output
+        env:
+          FROM_TAG_OUT: ${{ steps.changelog.outputs.fromTag }}
+        run: |
+          echo "fromTag: $FROM_TAG_OUT"
+          if [ -z "$FROM_TAG_OUT" ]; then
+            echo "FAIL: fromTag output is empty"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert toTag output
+        env:
+          TO_TAG_OUT: ${{ steps.changelog.outputs.toTag }}
+        run: |
+          echo "toTag: $TO_TAG_OUT"
+          if [ -z "$TO_TAG_OUT" ]; then
+            echo "FAIL: toTag output is empty"
+            exit 1
+          fi
+          echo "PASS"

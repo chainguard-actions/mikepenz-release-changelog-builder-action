@@ -1,0 +1,97 @@
+name: Test cache input (re-use exported cache)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      RUNNER_TEMP: /tmp
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git and create unique test tags for changelog range
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          TS=$(date +%s)
+          FROM_TAG="test-cache-in-from-${TS}"
+          TO_TAG="test-cache-in-to-${TS}"
+          git tag "$FROM_TAG" HEAD
+          echo "cache-input-marker-${TS}" > test-cache-input-marker.txt
+          git add test-cache-input-marker.txt
+          git commit -m "chore: add marker file for cache input test"
+          git tag "$TO_TAG" HEAD
+          echo "FROM_TAG=$FROM_TAG" >> "$GITHUB_ENV"
+          echo "TO_TAG=$TO_TAG" >> "$GITHUB_ENV"
+
+      - name: First run - export cache
+        id: first_run
+        uses: .
+        with:
+          fromTag: ${{ env.FROM_TAG }}
+          toTag: ${{ env.TO_TAG }}
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          exportCache: "true"
+
+      - name: Assert first run did not fail
+        env:
+          FAILED: ${{ steps.first_run.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: first run reported failure"
+            exit 1
+          fi
+          echo "PASS: first run succeeded"
+
+      - name: Assert cache output is present from first run
+        env:
+          CACHE: ${{ steps.first_run.outputs.cache }}
+        run: |
+          echo "cache output: $CACHE"
+          if [ -z "$CACHE" ]; then
+            echo "FAIL: cache output is empty after first run with exportCache=true"
+            exit 1
+          fi
+          echo "PASS: cache output is non-empty"
+
+      - name: Second run - consume cache input
+        id: second_run
+        uses: .
+        with:
+          fromTag: ${{ env.FROM_TAG }}
+          toTag: ${{ env.TO_TAG }}
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          exportCache: "true"
+          cache: ${{ steps.first_run.outputs.cache }}
+
+      - name: Assert second run did not fail
+        env:
+          FAILED: ${{ steps.second_run.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: second run (with cache input) reported failure"
+            exit 1
+          fi
+          echo "PASS: second run succeeded with cache input"
+
+      - name: Assert second run fromTag and toTag outputs
+        env:
+          FROM_TAG_OUT: ${{ steps.second_run.outputs.fromTag }}
+          TO_TAG_OUT: ${{ steps.second_run.outputs.toTag }}
+        run: |
+          echo "fromTag: $FROM_TAG_OUT"
+          echo "toTag: $TO_TAG_OUT"
+          if [ -z "$FROM_TAG_OUT" ] || [ -z "$TO_TAG_OUT" ]; then
+            echo "FAIL: fromTag or toTag output is empty in second run"
+            exit 1
+          fi
+          echo "PASS"

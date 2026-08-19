@@ -1,0 +1,80 @@
+name: Test basic offline mode
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create test tags for changelog range
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          # Tag the current HEAD as the from-tag
+          git tag test-from-v0.0.1 HEAD
+          # Create an empty commit so there is something between the two tags
+          git commit --allow-empty -m "test: marker commit for offline changelog test"
+          # Tag the new HEAD as the to-tag
+          git tag test-to-v0.0.2 HEAD
+
+      - id: action
+        uses: .
+        with:
+          owner: test-owner
+          repo: test-repo
+          fromTag: test-from-v0.0.1
+          toTag: test-to-v0.0.2
+          mode: "COMMIT"
+          offlineMode: "true"
+          failOnError: "false"
+
+      - name: Assert failed output is false
+        if: always()
+        env:
+          ACTUAL: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "actual failed: '$ACTUAL'"
+          if [ "$ACTUAL" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS: action did not report failure"
+
+      - name: Assert fromTag output is set
+        if: always()
+        env:
+          ACTUAL: ${{ steps.action.outputs.fromTag }}
+        run: |
+          echo "actual fromTag: '$ACTUAL'"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: fromTag output is empty"
+            exit 1
+          fi
+          echo "PASS: fromTag is set to '$ACTUAL'"
+
+      - name: Assert toTag output is set
+        if: always()
+        env:
+          ACTUAL: ${{ steps.action.outputs.toTag }}
+        run: |
+          echo "actual toTag: '$ACTUAL'"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: toTag output is empty"
+            exit 1
+          fi
+          echo "PASS: toTag is set to '$ACTUAL'"
+
+      - name: Assert changelog output is set
+        if: always()
+        env:
+          ACTUAL: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "actual changelog: '$ACTUAL'"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: changelog output is empty"
+            exit 1
+          fi
+          echo "PASS: changelog output is set"
