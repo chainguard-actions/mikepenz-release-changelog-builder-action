@@ -1,0 +1,72 @@
+name: Test outputFile in offline mode
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve commit range for offline mode
+        id: range
+        run: |
+          TO_SHA=$(git rev-parse HEAD)
+          # Use HEAD~5 if available, otherwise HEAD~1, otherwise the initial commit
+          FROM_SHA=$(git rev-parse HEAD~5 2>/dev/null \
+            || git rev-parse HEAD~1 2>/dev/null \
+            || git rev-list --max-parents=0 HEAD | head -1)
+          echo "from_sha=$FROM_SHA" >> "$GITHUB_OUTPUT"
+          echo "to_sha=$TO_SHA" >> "$GITHUB_OUTPUT"
+          echo "fromTag: $FROM_SHA"
+          echo "toTag: $TO_SHA"
+
+      - id: action
+        uses: .
+        with:
+          fromTag: ${{ steps.range.outputs.from_sha }}
+          toTag: ${{ steps.range.outputs.to_sha }}
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          outputFile: "CHANGELOG_TEST.md"
+
+      - name: Assert action did not fail
+        env:
+          FAILED: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure"
+            exit 1
+          fi
+          echo "PASS: action completed without failure"
+
+      - name: Assert changelog output is non-empty
+        env:
+          CHANGELOG: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          if [ -z "$CHANGELOG" ]; then
+            echo "FAIL: changelog output is empty (expected at least one commit)"
+            exit 1
+          fi
+          echo "PASS: changelog output is non-empty"
+
+      - name: Assert output file was created and is non-empty
+        run: |
+          OUTPUT_FILE="$GITHUB_WORKSPACE/CHANGELOG_TEST.md"
+          if [ ! -f "$OUTPUT_FILE" ]; then
+            echo "FAIL: outputFile CHANGELOG_TEST.md was not created"
+            exit 1
+          fi
+          echo "PASS: output file exists"
+          echo "--- File contents ---"
+          cat "$OUTPUT_FILE"
+          # Verify file is non-empty
+          if [ ! -s "$OUTPUT_FILE" ]; then
+            echo "FAIL: output file is empty"
+            exit 1
+          fi
+          echo "PASS: output file is non-empty"

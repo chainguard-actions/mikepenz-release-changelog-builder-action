@@ -1,0 +1,88 @@
+name: Test exportCache and cache inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve commit range for offline mode
+        id: range
+        run: |
+          TO_SHA=$(git rev-parse HEAD)
+          FROM_SHA=$(git rev-parse HEAD~5 2>/dev/null \
+            || git rev-parse HEAD~1 2>/dev/null \
+            || git rev-list --max-parents=0 HEAD | head -1)
+          echo "from_sha=$FROM_SHA" >> "$GITHUB_OUTPUT"
+          echo "to_sha=$TO_SHA" >> "$GITHUB_OUTPUT"
+          echo "fromTag: $FROM_SHA"
+          echo "toTag: $TO_SHA"
+
+      # First run: export cache
+      - id: first-run
+        uses: .
+        with:
+          fromTag: ${{ steps.range.outputs.from_sha }}
+          toTag: ${{ steps.range.outputs.to_sha }}
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          exportCache: "true"
+
+      - name: Assert first run did not fail
+        env:
+          FAILED: ${{ steps.first-run.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: first run reported failure"
+            exit 1
+          fi
+          echo "PASS: first run completed without failure"
+
+      - name: Assert cache output is set
+        env:
+          CACHE_OUT: ${{ steps.first-run.outputs.cache }}
+        run: |
+          echo "cache output length: ${#CACHE_OUT}"
+          if [ -z "$CACHE_OUT" ]; then
+            echo "FAIL: cache output is empty after exportCache=true"
+            exit 1
+          fi
+          echo "PASS: cache output is non-empty"
+
+      # Second run: consume the cache
+      - id: second-run
+        uses: .
+        with:
+          fromTag: ${{ steps.range.outputs.from_sha }}
+          toTag: ${{ steps.range.outputs.to_sha }}
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          cache: ${{ steps.first-run.outputs.cache }}
+
+      - name: Assert second run did not fail
+        env:
+          FAILED: ${{ steps.second-run.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: second run (with cache) reported failure"
+            exit 1
+          fi
+          echo "PASS: second run completed without failure"
+
+      - name: Assert second run changelog is non-empty
+        env:
+          CHANGELOG: ${{ steps.second-run.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          if [ -z "$CHANGELOG" ]; then
+            echo "FAIL: changelog output is empty on second run with cache"
+            exit 1
+          fi
+          echo "PASS: changelog output is non-empty on second run with cache"

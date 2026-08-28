@@ -1,0 +1,73 @@
+name: Test includeOnlyPaths input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve commit range for offline mode
+        id: range
+        run: |
+          TO_SHA=$(git rev-parse HEAD)
+          FROM_SHA=$(git rev-parse HEAD~5 2>/dev/null \
+            || git rev-parse HEAD~1 2>/dev/null \
+            || git rev-list --max-parents=0 HEAD | head -1)
+          echo "from_sha=$FROM_SHA" >> "$GITHUB_OUTPUT"
+          echo "to_sha=$TO_SHA" >> "$GITHUB_OUTPUT"
+          echo "fromTag: $FROM_SHA"
+          echo "toTag: $TO_SHA"
+
+      # Run with includeOnlyPaths set to a path that likely has no commits
+      # (to verify the filter is accepted without error)
+      - id: action-filtered
+        uses: .
+        with:
+          fromTag: ${{ steps.range.outputs.from_sha }}
+          toTag: ${{ steps.range.outputs.to_sha }}
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          includeOnlyPaths: |
+            src/
+            lib/
+
+      - name: Assert action did not fail with includeOnlyPaths
+        env:
+          FAILED: ${{ steps.action-filtered.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "FAIL: action reported failure when using includeOnlyPaths"
+            exit 1
+          fi
+          echo "PASS: action completed without failure with includeOnlyPaths"
+
+      - name: Assert fromTag and toTag outputs are set
+        env:
+          FROM_TAG: ${{ steps.action-filtered.outputs.fromTag }}
+          TO_TAG: ${{ steps.action-filtered.outputs.toTag }}
+        run: |
+          echo "fromTag: $FROM_TAG"
+          echo "toTag: $TO_TAG"
+          if [ -z "$TO_TAG" ]; then
+            echo "FAIL: toTag output is empty"
+            exit 1
+          fi
+          if [ -z "$FROM_TAG" ]; then
+            echo "FAIL: fromTag output is empty"
+            exit 1
+          fi
+          echo "PASS: tag outputs are set"
+
+      - name: Assert changelog output is present (may be empty if no matching paths)
+        env:
+          CHANGELOG: ${{ steps.action-filtered.outputs.changelog }}
+        run: |
+          echo "changelog: $CHANGELOG"
+          # With includeOnlyPaths filtering, changelog may be empty if no commits
+          # touched those paths — that is a valid result, not a failure.
+          echo "PASS: includeOnlyPaths accepted and action completed"

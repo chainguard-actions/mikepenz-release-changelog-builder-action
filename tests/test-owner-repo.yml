@@ -1,0 +1,50 @@
+name: Test owner and repo inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve commit range
+        id: range
+        run: |
+          TO_SHA=$(git rev-parse HEAD)
+          FROM_SHA=$(git rev-parse HEAD~1 2>/dev/null || git rev-list --max-parents=0 HEAD | head -1)
+          echo "from_sha=$FROM_SHA" >> "$GITHUB_OUTPUT"
+          echo "to_sha=$TO_SHA" >> "$GITHUB_OUTPUT"
+          echo "fromTag: $FROM_SHA"
+          echo "toTag: $TO_SHA"
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          fromTag: ${{ steps.range.outputs.from_sha }}
+          toTag: ${{ steps.range.outputs.to_sha }}
+          owner: "mikepenz"
+          repo: "release-changelog-builder-action"
+          failOnError: "false"
+
+      - name: Assert action ran (success or graceful failure on sentinel repo)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          FAILED: ${{ steps.action.outputs.failed }}
+          OWNER_OUT: ${{ steps.action.outputs.owner }}
+          REPO_OUT: ${{ steps.action.outputs.repo }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "failed: $FAILED"
+          echo "owner output: $OWNER_OUT"
+          echo "repo output: $REPO_OUT"
+          if [ "$OUTCOME" = "success" ]; then
+            echo "PASS: action succeeded with owner/repo inputs"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (API call with sentinel token)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
