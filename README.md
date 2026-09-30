@@ -13,6 +13,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 | v6.2.2 | [`v6.2.2`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/tree/v6.2.2) | [`348e88f`](https://github.com/mikepenz/release-changelog-builder-action/commit/348e88fab4c37338b1e803ceb2d4a7a5db6c0833) |
 | v6.2.3 | [`v6.2.3`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/tree/v6.2.3) | [`c9bcd82`](https://github.com/mikepenz/release-changelog-builder-action/commit/c9bcd8238b6f41e05561348339429d360b1c0247) |
 | v6.3.0 | [`v6.3.0`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/tree/v6.3.0) | [`cb021f9`](https://github.com/mikepenz/release-changelog-builder-action/commit/cb021f9b36a51a7c6f18e4679b6fa2cb77a1260c) |
+| v6.4.0 | [`v6.4.0`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/tree/v6.4.0) | [`aa01373`](https://github.com/mikepenz/release-changelog-builder-action/commit/aa013739bbc8e7067dbbecd4525ff11aeb51a84b) |
 
 ## Privacy
 
