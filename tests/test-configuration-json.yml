@@ -1,0 +1,87 @@
+name: Test changelog with configurationJson input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git and create test tags
+        run: |
+          git config --global --add safe.directory '*'
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Ensure we have at least 2 commits for a meaningful range
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          echo "Commit count: $COMMIT_COUNT"
+          if [ "$COMMIT_COUNT" -lt 2 ]; then
+            echo "dummy" > dummy_for_config_test.txt
+            git add dummy_for_config_test.txt
+            git commit -m "chore: add dummy commit for test range"
+          fi
+          # Delete tags if they already exist
+          git tag -d v2.0.0 2>/dev/null || true
+          git tag -d v2.0.1 2>/dev/null || true
+          # Create two tags at different commits
+          git tag v2.0.0 HEAD~1
+          git tag v2.0.1 HEAD
+          echo "Tags created:"
+          git tag -l
+
+      - id: changelog
+        uses: .
+        with:
+          fromTag: v2.0.0
+          toTag: v2.0.1
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          configurationJson: |
+            {
+              "categories": [
+                {
+                  "title": "## 🚀 Features",
+                  "labels": ["feature", "enhancement"]
+                },
+                {
+                  "title": "## 🐛 Fixes",
+                  "labels": ["fix", "bug"]
+                }
+              ],
+              "template": "#{{CHANGELOG}}",
+              "pr_template": "- #{{TITLE}}"
+            }
+
+      - name: Assert action ran and produced outputs
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          echo "failed: $FAILED"
+          echo "changelog length: ${#CHANGELOG}"
+          if [ -z "$FAILED" ]; then
+            echo "FAIL: 'failed' output was not set"
+            exit 1
+          fi
+          echo "PASS: action ran with configurationJson, failed=$FAILED"
+
+      - name: Assert fromTag and toTag outputs
+        env:
+          FROM_TAG: ${{ steps.changelog.outputs.fromTag }}
+          TO_TAG: ${{ steps.changelog.outputs.toTag }}
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "fromTag: $FROM_TAG"
+          echo "toTag: $TO_TAG"
+          if [ "$FAILED" = "true" ]; then
+            echo "PASS: action ran (failed gracefully)"
+          else
+            if [ -z "$FROM_TAG" ] || [ -z "$TO_TAG" ]; then
+              echo "FAIL: fromTag or toTag output missing"
+              exit 1
+            fi
+            echo "PASS: fromTag=$FROM_TAG toTag=$TO_TAG"
+          fi

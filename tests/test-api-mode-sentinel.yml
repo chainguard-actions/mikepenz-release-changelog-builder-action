@@ -1,0 +1,62 @@
+name: Test API mode graceful failure with sentinel repo
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git and create test tags
+        run: |
+          git config --global --add safe.directory '*'
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Ensure we have at least 2 commits for a meaningful range
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          echo "Commit count: $COMMIT_COUNT"
+          if [ "$COMMIT_COUNT" -lt 2 ]; then
+            echo "dummy" > dummy_for_api_test.txt
+            git add dummy_for_api_test.txt
+            git commit -m "chore: add dummy commit for test range"
+          fi
+          # Delete tags if they already exist
+          git tag -d v3.0.0 2>/dev/null || true
+          git tag -d v3.0.1 2>/dev/null || true
+          # Create two tags at different commits
+          git tag v3.0.0 HEAD~1
+          git tag v3.0.1 HEAD
+          echo "Tags created:"
+          git tag -l
+
+      - id: changelog
+        uses: .
+        continue-on-error: true
+        with:
+          fromTag: v3.0.0
+          toTag: v3.0.1
+          failOnError: "false"
+
+      - name: Assert action ran (success or graceful failure on sentinel repo)
+        env:
+          OUTCOME: ${{ steps.changelog.outcome }}
+          FAILED: ${{ steps.changelog.outputs.failed }}
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "failed: $FAILED"
+          echo "changelog: $CHANGELOG"
+          if [ "$OUTCOME" = "success" ]; then
+            if [ -z "$FAILED" ]; then
+              echo "FAIL: action succeeded but 'failed' output was not set"
+              exit 1
+            fi
+            echo "PASS: action succeeded with failed=$FAILED"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (sentinel repo not resolvable via API)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

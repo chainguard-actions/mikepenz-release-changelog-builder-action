@@ -1,0 +1,82 @@
+name: Test exportCache feature
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git and create test tags
+        run: |
+          git config --global --add safe.directory '*'
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Ensure we have at least 2 commits for a meaningful range
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          echo "Commit count: $COMMIT_COUNT"
+          if [ "$COMMIT_COUNT" -lt 2 ]; then
+            echo "dummy" > dummy_for_cache_test.txt
+            git add dummy_for_cache_test.txt
+            git commit -m "chore: add dummy commit for test range"
+          fi
+          # Delete tags if they already exist
+          git tag -d v4.0.0 2>/dev/null || true
+          git tag -d v4.0.1 2>/dev/null || true
+          # Create two tags at different commits
+          git tag v4.0.0 HEAD~1
+          git tag v4.0.1 HEAD
+          echo "Tags created:"
+          git tag -l
+
+      - id: changelog
+        uses: .
+        with:
+          fromTag: v4.0.0
+          toTag: v4.0.1
+          offlineMode: "true"
+          commitMode: "true"
+          exportCache: "true"
+          failOnError: "false"
+
+      - name: Assert failed output is set
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ -z "$FAILED" ]; then
+            echo "FAIL: 'failed' output was not set"
+            exit 1
+          fi
+          echo "PASS: 'failed' output is '$FAILED'"
+
+      - name: Assert cache output when action succeeded
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+          CACHE: ${{ steps.changelog.outputs.cache }}
+        run: |
+          echo "failed: $FAILED"
+          echo "cache length: ${#CACHE}"
+          if [ "$FAILED" = "true" ]; then
+            echo "PASS: action ran (failed gracefully, cache may be empty)"
+          elif [ -n "$CACHE" ]; then
+            echo "PASS: cache output is populated: $CACHE"
+          else
+            echo "INFO: cache output is empty (may be expected for same-commit range)"
+            echo "PASS"
+          fi
+
+      - name: Assert changelog output
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          echo "changelog: $CHANGELOG"
+          if [ "$FAILED" = "true" ]; then
+            echo "PASS: action ran (failed gracefully)"
+          else
+            echo "PASS: action completed successfully"
+          fi

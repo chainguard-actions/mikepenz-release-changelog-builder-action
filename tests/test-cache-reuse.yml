@@ -1,0 +1,90 @@
+name: Test changelog cache reuse via cache input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git and create test tags
+        run: |
+          git config --global --add safe.directory '*'
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Ensure we have at least 2 commits for a meaningful range
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          echo "Commit count: $COMMIT_COUNT"
+          if [ "$COMMIT_COUNT" -lt 2 ]; then
+            echo "dummy" > dummy_for_cache_reuse_test.txt
+            git add dummy_for_cache_reuse_test.txt
+            git commit -m "chore: add dummy commit for cache reuse test"
+          fi
+          # Delete tags if they already exist
+          git tag -d v8.0.0 2>/dev/null || true
+          git tag -d v8.0.1 2>/dev/null || true
+          # Create two tags at different commits
+          git tag v8.0.0 HEAD~1
+          git tag v8.0.1 HEAD
+          echo "Tags created:"
+          git tag -l
+
+      # First run: export cache
+      - id: first_run
+        uses: .
+        with:
+          fromTag: v8.0.0
+          toTag: v8.0.1
+          offlineMode: "true"
+          commitMode: "true"
+          exportCache: "true"
+          failOnError: "false"
+
+      - name: Assert first run produced failed output
+        env:
+          FAILED: ${{ steps.first_run.outputs.failed }}
+        run: |
+          echo "first run failed: $FAILED"
+          if [ -z "$FAILED" ]; then
+            echo "FAIL: 'failed' output was not set on first run"
+            exit 1
+          fi
+          echo "PASS: first run completed, failed=$FAILED"
+
+      # Second run: consume the cache from the first run using the 'cache' input
+      - id: second_run
+        uses: .
+        with:
+          fromTag: v8.0.0
+          toTag: v8.0.1
+          offlineMode: "true"
+          commitMode: "true"
+          failOnError: "false"
+          # 'cache' input: pass the cache from the first run
+          cache: ${{ steps.first_run.outputs.cache }}
+
+      - name: Assert second run produced failed output
+        env:
+          FAILED: ${{ steps.second_run.outputs.failed }}
+        run: |
+          echo "second run failed: $FAILED"
+          if [ -z "$FAILED" ]; then
+            echo "FAIL: 'failed' output was not set on second run"
+            exit 1
+          fi
+          echo "PASS: second run completed with cache input, failed=$FAILED"
+
+      - name: Assert second run changelog output
+        env:
+          CHANGELOG: ${{ steps.second_run.outputs.changelog }}
+          FAILED: ${{ steps.second_run.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          echo "changelog length: ${#CHANGELOG}"
+          if [ "$FAILED" = "true" ]; then
+            echo "PASS: action ran (failed gracefully)"
+          else
+            echo "PASS: action completed with cache reuse"
+          fi

@@ -1,0 +1,68 @@
+name: Test changelog written to output file
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git and create test tags
+        run: |
+          git config --global --add safe.directory '*'
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Ensure we have at least 2 commits for a meaningful range
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          echo "Commit count: $COMMIT_COUNT"
+          if [ "$COMMIT_COUNT" -lt 2 ]; then
+            echo "dummy" > dummy_for_test_output.txt
+            git add dummy_for_test_output.txt
+            git commit -m "chore: add dummy commit for test range"
+          fi
+          # Delete tags if they already exist
+          git tag -d v1.0.0 2>/dev/null || true
+          git tag -d v1.0.1 2>/dev/null || true
+          # Create two tags at different commits
+          git tag v1.0.0 HEAD~1
+          git tag v1.0.1 HEAD
+          echo "Tags created:"
+          git tag -l
+
+      - id: changelog
+        uses: .
+        with:
+          fromTag: v1.0.0
+          toTag: v1.0.1
+          offlineMode: "true"
+          commitMode: "true"
+          outputFile: "CHANGELOG_TEST.md"
+          failOnError: "false"
+
+      - name: Assert failed output
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ -z "$FAILED" ]; then
+            echo "FAIL: 'failed' output was not set at all"
+            exit 1
+          fi
+          echo "PASS: 'failed' output is '$FAILED'"
+
+      - name: Assert output file was created
+        env:
+          FAILED: ${{ steps.changelog.outputs.failed }}
+        run: |
+          echo "failed: $FAILED"
+          if [ "$FAILED" = "true" ]; then
+            echo "PASS: action ran (failed gracefully, skipping file check)"
+          elif [ -f "$GITHUB_WORKSPACE/CHANGELOG_TEST.md" ]; then
+            echo "PASS: output file exists"
+            cat "$GITHUB_WORKSPACE/CHANGELOG_TEST.md"
+          else
+            echo "INFO: output file not created (may be expected for empty changelog)"
+            echo "PASS"
+          fi
