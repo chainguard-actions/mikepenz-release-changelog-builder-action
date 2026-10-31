@@ -14,6 +14,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 | v6.2.3 | [`v6.2.3`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/tree/v6.2.3) | [`c9bcd82`](https://github.com/mikepenz/release-changelog-builder-action/commit/c9bcd8238b6f41e05561348339429d360b1c0247) | [`HARDENING.md`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/blob/v6.2.3/HARDENING.md) |
 | v6.3.0 | [`v6.3.0`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/tree/v6.3.0) | [`cb021f9`](https://github.com/mikepenz/release-changelog-builder-action/commit/cb021f9b36a51a7c6f18e4679b6fa2cb77a1260c) | [`HARDENING.md`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/blob/v6.3.0/HARDENING.md) |
 | v6.4.0 | [`v6.4.0`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/tree/v6.4.0) | [`aa01373`](https://github.com/mikepenz/release-changelog-builder-action/commit/aa013739bbc8e7067dbbecd4525ff11aeb51a84b) | [`HARDENING.md`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/blob/v6.4.0/HARDENING.md) |
+| v6.5.0 | [`v6.5.0`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/tree/v6.5.0) | [`b0db9d1`](https://github.com/mikepenz/release-changelog-builder-action/commit/b0db9d18b53447ef9f940a46c8f31653c4d9f621) | [`HARDENING.md`](https://github.com/chainguard-actions/mikepenz-release-changelog-builder-action/blob/v6.5.0/HARDENING.md) |
 
 ## Privacy
 
