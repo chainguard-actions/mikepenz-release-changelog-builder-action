@@ -1,0 +1,57 @@
+name: Test offline mode writing changelog to outputFile
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a local fixture git repository with tags
+        run: |
+          set -e
+          git config --global --add safe.directory '*'
+          R="$GITHUB_WORKSPACE/rcba-repo"
+          rm -rf "$R"; mkdir -p "$R"; cd "$R"
+          git init -q
+          git checkout -q -b main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo a > README.md; git add .; git commit -q -m "chore: initial commit"
+          git tag v2.0.0
+          echo b > f.txt; git add .; git commit -q -m "feat: output file feature"
+          git tag v2.1.0
+      - id: action
+        uses: .
+        with:
+          path: rcba-repo
+          offlineMode: "true"
+          mode: COMMIT
+          owner: test-owner
+          repo: test-repo
+          fromTag: v2.0.0
+          toTag: v2.1.0
+          outputFile: CHANGELOG-generated.md
+          configurationJson: |
+            {
+              "template": "CHANGELOG:\n#{{CHANGELOG}}\nUNCATEGORIZED:\n#{{UNCATEGORIZED}}",
+              "pr_template": "- #{{TITLE}}"
+            }
+      - name: Assert output file written with changelog
+        env:
+          CHANGELOG: ${{ steps.action.outputs.changelog }}
+        run: |
+          F="$GITHUB_WORKSPACE/rcba-repo/CHANGELOG-generated.md"
+          if [ ! -f "$F" ]; then
+            echo "FAIL: $F not written"; ls -la "$GITHUB_WORKSPACE/rcba-repo"; exit 1
+          fi
+          echo "file:"; cat "$F"
+          grep -q "feat: output file feature" "$F" || { echo "FAIL: file missing commit"; exit 1; }
+          norm() { sed -e 's/[[:space:]]*$//' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'; }
+          FILE_NORM="$(norm < "$F")"
+          OUT_NORM="$(printf '%s\n' "$CHANGELOG" | norm)"
+          if [ "$FILE_NORM" != "$OUT_NORM" ]; then
+            echo "FAIL: file content differs from changelog output"
+            diff <(printf '%s\n' "$FILE_NORM") <(printf '%s\n' "$OUT_NORM") || true
+            exit 1
+          fi
+          echo "PASS"

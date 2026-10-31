@@ -1,0 +1,73 @@
+name: Test offline cache export and reuse
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a local fixture git repository with tags
+        run: |
+          set -e
+          git config --global --add safe.directory '*'
+          R="$GITHUB_WORKSPACE/rcba-repo"
+          rm -rf "$R"; mkdir -p "$R"; cd "$R"
+          git init -q
+          git checkout -q -b main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo a > README.md; git add .; git commit -q -m "chore: initial commit before range"
+          git tag v1.0.0
+          echo x > widget.txt; git add .; git commit -q -m "feat: add widget feature"
+          git tag v1.1.0
+      - id: export
+        uses: .
+        with:
+          path: rcba-repo
+          offlineMode: "true"
+          mode: COMMIT
+          owner: test-owner
+          repo: test-repo
+          fromTag: v1.0.0
+          toTag: v1.1.0
+          exportCache: "true"
+          exportOnly: "true"
+      - name: Assert cache exported
+        env:
+          CACHE: ${{ steps.export.outputs.cache }}
+        run: |
+          echo "cache: $CACHE"
+          [ -n "$CACHE" ] || { echo "FAIL: cache output empty"; exit 1; }
+          [ -f "$CACHE" ] || { echo "FAIL: cache file missing"; exit 1; }
+          grep -q "widget" "$CACHE" || { echo "FAIL: cache does not contain commit data"; exit 1; }
+          echo "PASS"
+      - id: reuse
+        uses: .
+        with:
+          path: rcba-repo
+          offlineMode: "true"
+          mode: COMMIT
+          cache: ${{ steps.export.outputs.cache }}
+          configurationJson: |
+            {
+              "template": "FROM-CACHE\n#{{UNCATEGORIZED}}",
+              "pr_template": "- #{{TITLE}}",
+              "empty_template": "EMPTY-CHANGELOG"
+            }
+      - name: Assert changelog built from cache
+        env:
+          CHANGELOG: ${{ steps.reuse.outputs.changelog }}
+          OWNER: ${{ steps.reuse.outputs.owner }}
+          FROM: ${{ steps.reuse.outputs.fromTag }}
+          TO: ${{ steps.reuse.outputs.toTag }}
+          FAILED: ${{ steps.reuse.outputs.failed }}
+        run: |
+          echo "owner=$OWNER from=$FROM to=$TO failed=$FAILED"
+          echo "changelog:"; echo "$CHANGELOG"
+          echo "$CHANGELOG" | grep -q "FROM-CACHE" || { echo "FAIL: template not applied"; exit 1; }
+          echo "$CHANGELOG" | grep -q "feat: add widget feature" || { echo "FAIL: cached commit missing"; exit 1; }
+          [ "$OWNER" = "test-owner" ] || { echo "FAIL: owner should come from cache"; exit 1; }
+          [ "$FROM" = "v1.0.0" ] || { echo "FAIL: fromTag"; exit 1; }
+          [ "$TO" = "v1.1.0" ] || { echo "FAIL: toTag"; exit 1; }
+          [ "$FAILED" = "false" ] || { echo "FAIL: failed should be false"; exit 1; }
+          echo "PASS"

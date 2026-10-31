@@ -1,0 +1,56 @@
+name: Test offline mode auto-resolving tags from local repository
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a local fixture git repository with tags
+        run: |
+          set -e
+          git config --global --add safe.directory '*'
+          R="$GITHUB_WORKSPACE/rcba-repo"
+          rm -rf "$R"; mkdir -p "$R"; cd "$R"
+          git init -q
+          git checkout -q -b main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo a > README.md; git add .; git commit -q -m "chore: initial commit"
+          git tag v1.0.0
+          echo b > one.txt; git add .; git commit -q -m "fix: first bugfix"
+          git tag v1.1.0
+          echo c > two.txt; git add .; git commit -q -m "feat: shiny new thing"
+          git tag v1.2.0
+      - id: action
+        uses: .
+        with:
+          path: rcba-repo
+          offlineMode: "true"
+          commitMode: "true"
+          owner: test-owner
+          repo: test-repo
+          configurationJson: |
+            {
+              "template": "CHANGELOG:\n#{{CHANGELOG}}\nUNCATEGORIZED:\n#{{UNCATEGORIZED}}",
+              "pr_template": "- #{{TITLE}}"
+            }
+      - name: Assert tags resolved to latest two semver tags
+        env:
+          FROM: ${{ steps.action.outputs.fromTag }}
+          TO: ${{ steps.action.outputs.toTag }}
+        run: |
+          echo "from=$FROM to=$TO"
+          [ "$TO" = "v1.2.0" ] || { echo "FAIL: expected toTag v1.2.0"; exit 1; }
+          [ "$FROM" = "v1.1.0" ] || { echo "FAIL: expected fromTag v1.1.0"; exit 1; }
+          echo "PASS"
+      - name: Assert changelog contains only latest range
+        env:
+          CHANGELOG: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "$CHANGELOG"
+          echo "$CHANGELOG" | grep -q "feat: shiny new thing" || { echo "FAIL: missing latest commit"; exit 1; }
+          if echo "$CHANGELOG" | grep -q "fix: first bugfix"; then
+            echo "FAIL: older commit included"; exit 1
+          fi
+          echo "PASS"

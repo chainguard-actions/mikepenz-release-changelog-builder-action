@@ -1,0 +1,67 @@
+name: Test offline commit mode with explicit fromTag/toTag
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a local fixture git repository with tags
+        run: |
+          set -e
+          git config --global --add safe.directory '*'
+          R="$GITHUB_WORKSPACE/rcba-repo"
+          rm -rf "$R"; mkdir -p "$R"; cd "$R"
+          git init -q
+          git checkout -q -b main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo a > README.md; git add .; git commit -q -m "chore: initial commit before range"
+          git tag v1.0.0
+          mkdir -p src docs
+          echo x > src/widget.txt; git add .; git commit -q -m "feat: add widget feature"
+          echo y > docs/guide.md; git add .; git commit -q -m "docs: write user guide"
+          git tag v1.1.0
+          git log --oneline
+      - id: action
+        uses: .
+        with:
+          path: rcba-repo
+          offlineMode: "true"
+          mode: COMMIT
+          owner: test-owner
+          repo: test-repo
+          fromTag: v1.0.0
+          toTag: v1.1.0
+          configurationJson: |
+            {
+              "template": "CHANGELOG:\n#{{CHANGELOG}}\nUNCATEGORIZED:\n#{{UNCATEGORIZED}}",
+              "pr_template": "- #{{TITLE}}",
+              "empty_template": "EMPTY-CHANGELOG"
+            }
+      - name: Assert changelog contents
+        env:
+          CHANGELOG: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "changelog:"; echo "$CHANGELOG"
+          echo "$CHANGELOG" | grep -q "feat: add widget feature" || { echo "FAIL: missing widget commit"; exit 1; }
+          echo "$CHANGELOG" | grep -q "docs: write user guide" || { echo "FAIL: missing guide commit"; exit 1; }
+          if echo "$CHANGELOG" | grep -q "initial commit before range"; then
+            echo "FAIL: commit before fromTag must not be included"; exit 1
+          fi
+          echo "PASS"
+      - name: Assert metadata outputs
+        env:
+          FROM: ${{ steps.action.outputs.fromTag }}
+          TO: ${{ steps.action.outputs.toTag }}
+          OWNER: ${{ steps.action.outputs.owner }}
+          REPO: ${{ steps.action.outputs.repo }}
+          FAILED: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "from=$FROM to=$TO owner=$OWNER repo=$REPO failed=$FAILED"
+          [ "$FROM" = "v1.0.0" ] || { echo "FAIL: fromTag"; exit 1; }
+          [ "$TO" = "v1.1.0" ] || { echo "FAIL: toTag"; exit 1; }
+          [ "$OWNER" = "test-owner" ] || { echo "FAIL: owner"; exit 1; }
+          [ "$REPO" = "test-repo" ] || { echo "FAIL: repo"; exit 1; }
+          [ "$FAILED" = "false" ] || { echo "FAIL: failed should be false"; exit 1; }
+          echo "PASS"

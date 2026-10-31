@@ -1,0 +1,51 @@
+name: Test offline mode with includeOnlyPaths filter
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a local fixture git repository with tags
+        run: |
+          set -e
+          git config --global --add safe.directory '*'
+          R="$GITHUB_WORKSPACE/rcba-repo"
+          rm -rf "$R"; mkdir -p "$R"; cd "$R"
+          git init -q
+          git checkout -q -b main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo a > README.md; git add .; git commit -q -m "chore: initial commit"
+          git tag v1.0.0
+          mkdir -p src docs
+          echo x > src/widget.txt; git add .; git commit -q -m "feat: add widget feature"
+          echo y > docs/guide.md; git add .; git commit -q -m "docs: write user guide"
+          git tag v1.1.0
+      - id: action
+        uses: .
+        with:
+          path: rcba-repo
+          offlineMode: "true"
+          mode: COMMIT
+          owner: test-owner
+          repo: test-repo
+          fromTag: v1.0.0
+          toTag: v1.1.0
+          includeOnlyPaths: |
+            src
+          configurationJson: |
+            {
+              "template": "CHANGELOG:\n#{{CHANGELOG}}\nUNCATEGORIZED:\n#{{UNCATEGORIZED}}",
+              "pr_template": "- #{{TITLE}}"
+            }
+      - name: Assert only src commits included
+        env:
+          CHANGELOG: ${{ steps.action.outputs.changelog }}
+        run: |
+          echo "$CHANGELOG"
+          echo "$CHANGELOG" | grep -q "feat: add widget feature" || { echo "FAIL: missing src commit"; exit 1; }
+          if echo "$CHANGELOG" | grep -q "docs: write user guide"; then
+            echo "FAIL: docs commit should be filtered out"; exit 1
+          fi
+          echo "PASS"

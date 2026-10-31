@@ -1,0 +1,49 @@
+name: Test offline commit mode with explicit baseUrl
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a local fixture git repository with tags
+        run: |
+          set -e
+          git config --global --add safe.directory '*'
+          R="$GITHUB_WORKSPACE/rcba-repo"
+          rm -rf "$R"; mkdir -p "$R"; cd "$R"
+          git init -q
+          git checkout -q -b main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo a > README.md; git add .; git commit -q -m "chore: initial commit"
+          git tag v1.0.0
+          echo x > fix.txt; git add .; git commit -q -m "fix: resolve crash"
+          git tag v1.0.1
+      - id: action
+        uses: .
+        with:
+          path: rcba-repo
+          baseUrl: https://api.github.com
+          offlineMode: "true"
+          mode: COMMIT
+          owner: test-owner
+          repo: test-repo
+          fromTag: v1.0.0
+          toTag: v1.0.1
+          configurationJson: |
+            {
+              "template": "#{{UNCATEGORIZED}}",
+              "pr_template": "- #{{TITLE}}",
+              "empty_template": "EMPTY-CHANGELOG"
+            }
+      - name: Assert changelog generated
+        env:
+          CHANGELOG: ${{ steps.action.outputs.changelog }}
+          FAILED: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed=$FAILED"
+          echo "changelog:"; echo "$CHANGELOG"
+          echo "$CHANGELOG" | grep -q "fix: resolve crash" || { echo "FAIL: missing commit"; exit 1; }
+          [ "$FAILED" = "false" ] || { echo "FAIL: failed should be false"; exit 1; }
+          echo "PASS"

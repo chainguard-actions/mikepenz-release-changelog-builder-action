@@ -1,0 +1,53 @@
+name: Test offline commit mode with configuration file
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a local fixture git repository with tags and config file
+        run: |
+          set -e
+          git config --global --add safe.directory '*'
+          R="$GITHUB_WORKSPACE/rcba-repo"
+          rm -rf "$R"; mkdir -p "$R"; cd "$R"
+          git init -q
+          git checkout -q -b main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo a > README.md; git add .; git commit -q -m "chore: initial commit before range"
+          git tag v1.0.0
+          echo x > widget.txt; git add .; git commit -q -m "feat: add widget feature"
+          git tag v1.1.0
+          cat > "$R/../rcba-config.json" <<'EOF'
+          {
+            "template": "FROM-CONFIG-FILE\n#{{UNCATEGORIZED}}",
+            "pr_template": "* #{{TITLE}}",
+            "empty_template": "EMPTY-CHANGELOG"
+          }
+          EOF
+          mv "$R/../rcba-config.json" "$R/rcba-config.json"
+          cat "$R/rcba-config.json"
+      - id: action
+        uses: .
+        with:
+          path: rcba-repo
+          configuration: rcba-config.json
+          offlineMode: "true"
+          mode: COMMIT
+          owner: test-owner
+          repo: test-repo
+          fromTag: v1.0.0
+          toTag: v1.1.0
+      - name: Assert changelog uses configuration file template
+        env:
+          CHANGELOG: ${{ steps.action.outputs.changelog }}
+          FAILED: ${{ steps.action.outputs.failed }}
+        run: |
+          echo "failed=$FAILED"
+          echo "changelog:"; echo "$CHANGELOG"
+          echo "$CHANGELOG" | grep -q "FROM-CONFIG-FILE" || { echo "FAIL: template from config file not applied"; exit 1; }
+          echo "$CHANGELOG" | grep -qF "* feat: add widget feature" || { echo "FAIL: pr_template from config file not applied"; exit 1; }
+          [ "$FAILED" = "false" ] || { echo "FAIL: failed should be false"; exit 1; }
+          echo "PASS"
